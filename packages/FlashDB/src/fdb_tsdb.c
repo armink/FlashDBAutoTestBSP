@@ -13,6 +13,7 @@
  * TSL is time series log, the TSDB saved many TSLs.
  */
 
+#include <inttypes.h>
 #include <string.h>
 #include <flashdb.h>
 #include <fdb_low_lvl.h>
@@ -210,7 +211,7 @@ static fdb_err_t read_sector_info(fdb_tsdb_t db, uint32_t addr, tsdb_sec_info_t 
             if (sector->remain > LOG_IDX_DATA_SIZE + FDB_WG_ALIGN(tsl.log_len)) {
                 sector->remain -= (LOG_IDX_DATA_SIZE + FDB_WG_ALIGN(tsl.log_len));
             } else {
-                FDB_INFO("Error: this TSL (0x%08lX) size (%lu) is out of bound.\n", tsl.addr.index, tsl.log_len);
+                FDB_INFO("Error: this TSL (0x%08" PRIX32 ") size (%" PRIu32 ") is out of bound.\n", tsl.addr.index, tsl.log_len);
                 sector->remain = 0;
                 result = FDB_READ_ERR;
                 break;
@@ -367,7 +368,7 @@ static fdb_err_t tsl_append(fdb_tsdb_t db, fdb_blob_t blob)
     if (cur_time >= db->last_time) {
         db->last_time = cur_time;
     } else {
-        FDB_INFO("Warning: current timestamp (%ld) is less than the last save timestamp (%ld)\n", cur_time, db->last_time);
+        FDB_INFO("Warning: current timestamp (%" PRIdMAX ") is less than the last save timestamp (%" PRIdMAX ")\n", (intmax_t)cur_time, (intmax_t)(db->last_time));
     }
 
     return result;
@@ -483,8 +484,8 @@ void fdb_tsl_iter_by_time(fdb_tsdb_t db, fdb_time_t from, fdb_time_t to, fdb_tsl
                 /* copy the current using sector status  */
                 sector = db->cur_sec;
             }
-            if ((!found_start_tsl && ((from >= sector.start_time && from <= sector.end_time)
-                            || (sec_addr == oldest_addr && from <= sector.start_time))) || (found_start_tsl)) {
+            if ((found_start_tsl) || (!found_start_tsl && ((from >= sector.start_time && from <= sector.end_time)
+                                       || (sec_addr == oldest_addr && from <= sector.start_time)))) {
                 uint32_t start = sector.addr + SECTOR_HDR_DATA_SIZE, end = sector.end_idx;
 
                 found_start_tsl = true;
@@ -598,7 +599,7 @@ static bool check_sec_hdr_cb(tsdb_sec_info_t sector, void *arg1, void *arg2)
     fdb_tsdb_t db = arg->db;
 
     if (!sector->check_ok) {
-        FDB_INFO("Warning: Sector (0x%08lX) header check failed.\n", sector->addr);
+        FDB_INFO("Sector (0x%08" PRIu32 ") header info is incorrect.\n", sector->addr);
         (arg->check_failed) = true;
         return true;
     } else if (sector->status == FDB_SECTOR_STORE_USING) {
@@ -754,7 +755,7 @@ fdb_err_t fdb_tsdb_init(fdb_tsdb_t db, const char *name, const char *part_name, 
             db->oldest_addr = latest_addr + db_sec_size(db);
         }
     }
-    FDB_DEBUG("TSDB (%s) oldest sectors is 0x%08lX, current using sector is 0x%08lX.\n", db_name(db), db->oldest_addr,
+    FDB_DEBUG("TSDB (%s) oldest sectors is 0x%08" PRIX32 ", current using sector is 0x%08" PRIX32 ".\n", db_name(db), db->oldest_addr,
             db->cur_sec.addr);
     /* read the current using sector info */
     read_sector_info(db, db->cur_sec.addr, &db->cur_sec, true);
