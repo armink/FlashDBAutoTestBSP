@@ -56,6 +56,8 @@ int main(void)
     fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_LOCK, lock);
     fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_UNLOCK, unlock);
     fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
+    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_FILE_MODE, (void *)true);
+    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_MAX_SIZE, (void *)(sec_size * 4));
     fdb_tsdb_init(&_global_tsdb, "log", "fdb_tsdb1", get_time, 128, &kv_locker);
 
 //    kvdb_type_string_sample();

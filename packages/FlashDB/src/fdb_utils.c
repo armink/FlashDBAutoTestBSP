@@ -176,6 +176,8 @@ uint32_t _fdb_continue_ff_addr(fdb_db_t db, uint32_t start, uint32_t end)
     uint8_t buf[32], last_data = 0x00;
     size_t i, addr = start, read_size;
 
+    //TODO 考虑文件模式下的处理
+
     for (; start < end; start += sizeof(buf)) {
         if (start + sizeof(buf) < end) {
             read_size = sizeof(buf);
@@ -235,11 +237,71 @@ size_t fdb_blob_read(fdb_db_t db, fdb_blob_t blob)
     return read_len;
 }
 
+#ifdef FDB_USING_FILE_MODE
+#define DB_PATH_MAX            256
+static void get_db_file_path(fdb_db_t db, uint32_t addr, char *path, size_t size)
+{
+#define DB_NAME_MAX            8
+
+    /* from xxx.fdb.0 to xxx.fdb.n */
+    char file_name[DB_NAME_MAX + 4 + 10];
+    uint32_t sec_addr = FDB_ALIGN_DOWN(addr, db->sec_size);
+    int index = sec_addr / db->sec_size;
+
+    snprintf(file_name, sizeof(file_name), "%.*s.fdb.%d", DB_NAME_MAX, db->name, index);
+    if (strlen(db->storage.dir) + 1 + strlen(file_name) >= size) {
+        /* path is too long */
+        FDB_ASSERT(0)
+    }
+    snprintf(path, size, "%s/%s", db->storage.dir, file_name);
+}
+
+
+static FILE *open_db_file(fdb_db_t db, uint32_t addr, bool clean)
+{
+    uint32_t sec_addr = FDB_ALIGN_DOWN(addr, db->sec_size);
+
+    if (sec_addr != db->cur_sec || db->cur_fp == NULL || clean) {
+        char path[DB_PATH_MAX];
+
+        get_db_file_path(db, addr, path, DB_PATH_MAX);
+
+        if (db->cur_fp) {
+            fclose(db->cur_fp);
+        }
+        if (clean) {
+            /* clean the old file */
+            remove(path);
+        }
+        db->cur_sec = sec_addr;
+        /* open new database file */
+        db->cur_fp = fopen(path, "a+");
+    }
+
+    return db->cur_fp;
+}
+#endif /* FDB_USING_FILE_MODE */
+
 fdb_err_t _fdb_flash_read(fdb_db_t db, uint32_t addr, void *buf, size_t size)
 {
     fdb_err_t result = FDB_NO_ERR;
 
-    fal_partition_read(db->part, addr, (uint8_t *)buf, size);
+    if (db->file_mode) {
+#ifdef FDB_USING_FILE_MODE
+        FILE *fp = open_db_file(db, addr, false);
+        if (fp) {
+            addr = addr % db->sec_size;
+            fseek(fp, addr, SEEK_SET);
+            fread(buf, size, 1, fp);
+        } else {
+            result = FDB_READ_ERR;
+        }
+#endif
+    } else {
+#ifdef FDB_USING_FAL_MODE
+        fal_partition_read(db->storage.part, addr, (uint8_t *) buf, size);
+#endif
+    }
 
     return result;
 }
@@ -248,9 +310,19 @@ fdb_err_t _fdb_flash_erase(fdb_db_t db, uint32_t addr, size_t size)
 {
     fdb_err_t result = FDB_NO_ERR;
 
-    if (fal_partition_erase(db->part, addr, size) < 0)
-    {
-        result = FDB_ERASE_ERR;
+    if (db->file_mode) {
+#ifdef FDB_USING_FILE_MODE
+        FILE *fp = open_db_file(db, addr, true);
+        if (fp == NULL) {
+            result = FDB_ERASE_ERR;
+        }
+#endif
+    } else {
+#ifdef FDB_USING_FAL_MODE
+        if (fal_partition_erase(db->storage.part, addr, size) < 0) {
+            result = FDB_ERASE_ERR;
+        }
+#endif
     }
 
     return result;
@@ -260,9 +332,25 @@ fdb_err_t _fdb_flash_write(fdb_db_t db, uint32_t addr, const void *buf, size_t s
 {
     fdb_err_t result = FDB_NO_ERR;
 
-    if (fal_partition_write(db->part, addr, (uint8_t *)buf, size) < 0)
-    {
-        result = FDB_WRITE_ERR;
+    if (db->file_mode) {
+#ifdef FDB_USING_FILE_MODE
+        FILE *fp = open_db_file(db, addr, false);
+        if (fp) {
+            addr = addr % db->sec_size;
+            fseek(fp, addr, SEEK_SET);
+            fwrite(buf, size, 1, fp);
+            fflush(fp);
+        } else {
+            result = FDB_READ_ERR;
+        }
+#endif
+    } else {
+#ifdef FDB_USING_FAL_MODE
+        if (fal_partition_write(db->storage.part, addr, (uint8_t *)buf, size) < 0)
+        {
+            result = FDB_WRITE_ERR;
+        }
+#endif
     }
 
     return result;

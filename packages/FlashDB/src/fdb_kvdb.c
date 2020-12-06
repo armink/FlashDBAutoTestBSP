@@ -62,6 +62,7 @@
 
 #define KV_STATUS_TABLE_SIZE                     FDB_STATUS_TABLE_SIZE(FDB_KV_STATUS_NUM)
 
+//TODO 文件模式如何支持
 #define SECTOR_NUM                               (db_part_size(db) / db_sec_size(db))
 
 #define SECTOR_HDR_DATA_SIZE                     (FDB_WG_ALIGN(sizeof(struct sector_hdr_data)))
@@ -74,7 +75,8 @@
 #define db_name(db)                              (((fdb_db_t)db)->name)
 #define db_init_ok(db)                           (((fdb_db_t)db)->init_ok)
 #define db_sec_size(db)                          (((fdb_db_t)db)->sec_size)
-#define db_part_size(db)                         (((fdb_db_t)db)->part->len)
+//TODO 文件模式的处理
+#define db_part_size(db)                         (((fdb_db_t)db)->storage.part->len)
 #define db_lock(db)                                                            \
     do {                                                                       \
         if (((fdb_db_t)db)->lock) ((fdb_db_t)db)->lock((fdb_db_t)db);          \
@@ -1532,7 +1534,7 @@ void fdb_kvdb_control(fdb_kvdb_t db, int cmd, void *arg)
 
     switch (cmd) {
     case FDB_KVDB_CTRL_SET_SEC_SIZE:
-        /* the sector size change MUST before database initialization */
+        /* this change MUST before database initialization */
         FDB_ASSERT(db->parent.init_ok == false);
         db->parent.sec_size = *(uint32_t *)arg;
         break;
@@ -1544,6 +1546,22 @@ void fdb_kvdb_control(fdb_kvdb_t db, int cmd, void *arg)
         break;
     case FDB_KVDB_CTRL_SET_UNLOCK:
         db->parent.unlock = (void (*)(fdb_db_t db))arg;
+        break;
+    case FDB_KVDB_CTRL_SET_FILE_MODE:
+#ifdef FDB_USING_FILE_MODE
+        /* this change MUST before database initialization */
+        FDB_ASSERT(db->parent.init_ok == false);
+        db->parent.file_mode = (bool)arg;
+#else
+        FDB_INFO("Error: set file mode Failed. Please defined the FDB_USING_FILE_MODE macro.");
+#endif
+        break;
+    case FDB_KVDB_CTRL_SET_MAX_SIZE:
+#ifdef FDB_USING_FILE_MODE
+        /* this change MUST before database initialization */
+        FDB_ASSERT(db->parent.init_ok == false);
+        db->parent.max_size = (uint32_t)arg;
+#endif
         break;
     }
 }
@@ -1582,10 +1600,6 @@ fdb_err_t fdb_kvdb_init(fdb_kvdb_t db, const char *name, const char *part_name, 
     db->default_kvs = *default_kv;
     /* there is at least one empty sector for GC. */
     FDB_ASSERT((FDB_GC_EMPTY_SEC_THRESHOLD > 0 && FDB_GC_EMPTY_SEC_THRESHOLD < SECTOR_NUM))
-    /* must be aligned with sector size */
-    FDB_ASSERT(db_part_size(db) % db_sec_size(db) == 0);
-    /* must be has more than 2 sector */
-    FDB_ASSERT(db_part_size(db) / db_sec_size(db) >= 2);
 
 #ifdef FDB_KV_USING_CACHE
     for (i = 0; i < FDB_SECTOR_CACHE_TABLE_SIZE; i++) {
@@ -1596,7 +1610,8 @@ fdb_err_t fdb_kvdb_init(fdb_kvdb_t db, const char *name, const char *part_name, 
     }
 #endif /* FDB_KV_USING_CACHE */
 
-    FDB_DEBUG("KVDB in partition %s, size is %u bytes.\n", ((fdb_db_t)db)->part->name, db_part_size(db));
+    //TODO 更新分区打印
+    FDB_DEBUG("KVDB in partition %s, size is %u bytes.\n", ((fdb_db_t)db)->storage.part->name, db_part_size(db));
 
     result = _fdb_kv_load(db);
 

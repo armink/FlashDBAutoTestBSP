@@ -16,6 +16,10 @@
 
 #define FDB_LOG_TAG ""
 
+#if !defined(FDB_USING_FAL_MODE) && !defined(FDB_USING_FILE_MODE)
+#error "Please defined the FDB_USING_FAL_MODE or FDB_USING_FILE_MODE macro"
+#endif
+
 fdb_err_t _fdb_init_ex(fdb_db_t db, const char *name, const char *part_name, fdb_db_type type, void *user_data)
 {
     size_t block_size;
@@ -31,21 +35,41 @@ fdb_err_t _fdb_init_ex(fdb_db_t db, const char *name, const char *part_name, fdb
     db->name = name;
     db->type = type;
     db->user_data = user_data;
-    /* FAL (Flash Abstraction Layer) initialization */
-    fal_init();
-    /* check the flash partition */
-    if ((db->part = fal_partition_find(part_name)) == NULL) {
-        FDB_INFO("Error: Partition (%s) not found.\n", part_name);
-        return FDB_PART_NOT_FOUND;
+
+    if (db->file_mode) {
+#ifdef FDB_USING_FILE_MODE
+        /* must set when using file mode */
+        FDB_ASSERT(db->sec_size != 0);
+        FDB_ASSERT(db->max_size != 0);
+
+        db->storage.dir = part_name;
+#endif
+    } else {
+#ifdef FDB_USING_FAL_MODE
+        /* FAL (Flash Abstraction Layer) initialization */
+        fal_init();
+        /* check the flash partition */
+        if ((db->storage.part = fal_partition_find(part_name)) == NULL) {
+            FDB_INFO("Error: Partition (%s) not found.\n", part_name);
+            return FDB_PART_NOT_FOUND;
+        }
+
+        block_size = fal_flash_device_find(db->storage.part->flash_name)->blk_size;
+        if (db->sec_size == 0) {
+            db->sec_size = block_size;
+        } else {
+            /* must be aligned with block size */
+            FDB_ASSERT(db->sec_size % block_size == 0);
+        }
+
+        db->max_size = db->storage.part->len;
+#endif /* FDB_USING_FAL_MODE */
     }
 
-    block_size = fal_flash_device_find(db->part->flash_name)->blk_size;
-    if (db->sec_size == 0) {
-        db->sec_size = block_size;
-    } else {
-        /* must be aligned with block size */
-        FDB_ASSERT(db->sec_size % block_size == 0);
-    }
+    /* must align with sector size */
+    FDB_ASSERT(db->max_size % db->sec_size == 0);
+    /* must have more than or equal 2 sector */
+    FDB_ASSERT(db->max_size / db->sec_size >= 2);
 
     return FDB_NO_ERR;
 }
