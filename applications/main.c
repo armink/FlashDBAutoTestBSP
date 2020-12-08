@@ -6,6 +6,8 @@
 #include <fal.h>
 #include <flashdb.h>
 
+#include <rtdbg.h>
+
 static struct fdb_default_kv_node default_kv_set[] = {
         {"iap_need_copy_app", "0"},
         {"iap_need_crc32_check", "0"},
@@ -105,3 +107,23 @@ void big_env_blob_test()
     rt_kprintf("memcmp result: %d\n", memcmp(value, read_value, ENV_SIZE));
 }
 MSH_CMD_EXPORT(big_env_blob_test, big env blob test)
+
+void hexcat(size_t argc, char **argv)
+{
+    if (argc > 1) {
+        FILE *fp = fopen(argv[1], "rb");
+        if (fp) {
+            int len;
+            uint8_t buf[16];
+            do
+            {
+                memset(buf, 0, sizeof(buf));
+                len = fread(buf, sizeof(buf), 1, fp);
+                LOG_HEX("hexcat", sizeof(buf), buf, sizeof(buf));
+            }
+            while (len > 0);
+            fclose(fp);
+        }
+    }
+}
+MSH_CMD_EXPORT(hexcat, cat file for hex mode)

@@ -269,13 +269,15 @@ static FILE *open_db_file(fdb_db_t db, uint32_t addr, bool clean)
         if (db->cur_fp) {
             fclose(db->cur_fp);
         }
+
         if (clean) {
             /* clean the old file */
-            remove(path);
+            db->cur_fp = fopen(path, "wb+");
+        } else {
+            /* open the database file */
+            db->cur_fp = fopen(path, "ab+");
         }
         db->cur_sec = sec_addr;
-        /* open new database file */
-        db->cur_fp = fopen(path, "a+");
     }
 
     return db->cur_fp;
