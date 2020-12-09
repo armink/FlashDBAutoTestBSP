@@ -176,8 +176,6 @@ uint32_t _fdb_continue_ff_addr(fdb_db_t db, uint32_t start, uint32_t end)
     uint8_t buf[32], last_data = 0x00;
     size_t i, addr = start, read_size;
 
-    //TODO 考虑文件模式下的处理
-
     for (; start < end; start += sizeof(buf)) {
         if (start + sizeof(buf) < end) {
             read_size = sizeof(buf);
@@ -243,7 +241,7 @@ static void get_db_file_path(fdb_db_t db, uint32_t addr, char *path, size_t size
 {
 #define DB_NAME_MAX            8
 
-    /* from xxx.fdb.0 to xxx.fdb.n */
+    /* from db_name.fdb.0 to db_name.fdb.n */
     char file_name[DB_NAME_MAX + 4 + 10];
     uint32_t sec_addr = FDB_ALIGN_DOWN(addr, db->sec_size);
     int index = sec_addr / db->sec_size;
@@ -273,11 +271,16 @@ static FILE *open_db_file(fdb_db_t db, uint32_t addr, bool clean)
         if (clean) {
             /* clean the old file */
             db->cur_fp = fopen(path, "wb+");
-        } else {
-            /* open the database file */
-            db->cur_fp = fopen(path, "ab+");
+            fclose(db->cur_fp);
         }
+
+        /* open the database file */
+        db->cur_fp = fopen(path, "rb+");
         db->cur_sec = sec_addr;
+
+        if (db->cur_fp == NULL) {
+            FDB_INFO("Error: open (%s) file failed.\n", path);
+        }
     }
 
     return db->cur_fp;
@@ -315,10 +318,22 @@ fdb_err_t _fdb_flash_erase(fdb_db_t db, uint32_t addr, size_t size)
     if (db->file_mode) {
 #ifdef FDB_USING_FILE_MODE
         FILE *fp = open_db_file(db, addr, true);
-        if (fp == NULL) {
+        if (fp != NULL) {
+#define BUF_SIZE 32
+            uint8_t buf[BUF_SIZE];
+            size_t i;
+            fseek(fp, 0, SEEK_SET);
+            for (i = 0; i * BUF_SIZE < size; i++)
+            {
+                memset(buf, 0xFF, BUF_SIZE);
+                fwrite(buf, BUF_SIZE, 1, fp);
+            }
+            memset(buf, 0xFF, BUF_SIZE);
+            fwrite(buf, size - i * BUF_SIZE, 1, fp);
+        } else {
             result = FDB_ERASE_ERR;
         }
-#endif
+#endif /* FDB_USING_FILE_MODE */
     } else {
 #ifdef FDB_USING_FAL_MODE
         if (fal_partition_erase(db->storage.part, addr, size) < 0) {
@@ -345,7 +360,7 @@ fdb_err_t _fdb_flash_write(fdb_db_t db, uint32_t addr, const void *buf, size_t s
         } else {
             result = FDB_READ_ERR;
         }
-#endif
+#endif /* FDB_USING_FILE_MODE */
     } else {
 #ifdef FDB_USING_FAL_MODE
         if (fal_partition_write(db->storage.part, addr, (uint8_t *)buf, size) < 0)

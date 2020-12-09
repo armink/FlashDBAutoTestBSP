@@ -63,7 +63,7 @@
 #define KV_STATUS_TABLE_SIZE                     FDB_STATUS_TABLE_SIZE(FDB_KV_STATUS_NUM)
 
 //TODO 文件模式如何支持
-#define SECTOR_NUM                               (db_part_size(db) / db_sec_size(db))
+#define SECTOR_NUM                               (db_max_size(db) / db_sec_size(db))
 
 #define SECTOR_HDR_DATA_SIZE                     (FDB_WG_ALIGN(sizeof(struct sector_hdr_data)))
 #define SECTOR_DIRTY_OFFSET                      ((unsigned long)(&((struct sector_hdr_data *)0)->status_table.dirty))
@@ -75,8 +75,8 @@
 #define db_name(db)                              (((fdb_db_t)db)->name)
 #define db_init_ok(db)                           (((fdb_db_t)db)->init_ok)
 #define db_sec_size(db)                          (((fdb_db_t)db)->sec_size)
-//TODO 文件模式的处理
-#define db_part_size(db)                         (((fdb_db_t)db)->storage.part->len)
+#define db_max_size(db)                          (((fdb_db_t)db)->max_size)
+
 #define db_lock(db)                                                            \
     do {                                                                       \
         if (((fdb_db_t)db)->lock) ((fdb_db_t)db)->lock((fdb_db_t)db);          \
@@ -320,7 +320,7 @@ static fdb_err_t read_kv(fdb_kvdb_t db, fdb_kv_t kv)
     kv->status = (fdb_kv_status_t) _fdb_get_status(kv_hdr.status_table, FDB_KV_STATUS_NUM);
     kv->len = kv_hdr.len;
 
-    if (kv->len == ~0UL || kv->len > db_part_size(db) || kv->len < KV_NAME_LEN_OFFSET) {
+    if (kv->len == ~0UL || kv->len > db_max_size(db) || kv->len < KV_NAME_LEN_OFFSET) {
         /* the KV length was not write, so reserved the info for current KV */
         kv->len = KV_HDR_DATA_SIZE;
         if (kv->status != FDB_KV_ERR_HDR) {
@@ -330,7 +330,7 @@ static fdb_err_t read_kv(fdb_kvdb_t db, fdb_kv_t kv)
         }
         kv->crc_is_ok = false;
         return FDB_READ_ERR;
-    } else if (kv->len > db_sec_size(db) - SECTOR_HDR_DATA_SIZE && kv->len < db_part_size(db)) {
+    } else if (kv->len > db_sec_size(db) - SECTOR_HDR_DATA_SIZE && kv->len < db_max_size(db)) {
         //TODO 扇区连续模式，或者写入长度没有写入完整
         FDB_ASSERT(0);
     }
@@ -459,7 +459,7 @@ static uint32_t get_next_sector_addr(fdb_kvdb_t db, kv_sec_info_t pre_sec)
             next_addr = pre_sec->addr + pre_sec->combined * db_sec_size(db);
         }
         /* check range */
-        if (next_addr < db_part_size(db)) {
+        if (next_addr < db_max_size(db)) {
             return next_addr;
         } else {
             /* no sector */
@@ -1281,7 +1281,7 @@ fdb_err_t fdb_kv_set_default(fdb_kvdb_t db)
     /* lock the KV cache */
     db_lock(db);
     /* format all sectors */
-    for (addr = 0; addr < db_part_size(db); addr += db_sec_size(db)) {
+    for (addr = 0; addr < db_max_size(db); addr += db_sec_size(db)) {
         result = format_sector(db, addr, SECTOR_NOT_COMBINED);
         if (result != FDB_NO_ERR) {
             goto __exit;
@@ -1381,7 +1381,7 @@ void fdb_kv_print(fdb_kvdb_t db)
 
     FDB_PRINT("\nmode: next generation\n");
     FDB_PRINT("size: %u/%u bytes.\n", using_size + (size_t)((SECTOR_NUM - FDB_GC_EMPTY_SEC_THRESHOLD) * SECTOR_HDR_DATA_SIZE),
-            (size_t)(db_part_size(db) - db_sec_size(db) * FDB_GC_EMPTY_SEC_THRESHOLD));
+            (size_t)(db_max_size(db) - db_sec_size(db) * FDB_GC_EMPTY_SEC_THRESHOLD));
 
     /* unlock the KV cache */
     db_unlock(db);
@@ -1432,7 +1432,7 @@ static bool check_sec_hdr_cb(kv_sec_info_t sector, void *arg1, void *arg2)
         size_t *failed_count = arg1;
         fdb_kvdb_t db = arg2;
 
-        FDB_INFO("Sector header info is incorrect. Auto format this sector (0x%08" PRIX32 ").\n", sector->addr);
+        FDB_DEBUG("Sector header info is incorrect. Auto format this sector (0x%08" PRIX32 ").\n", sector->addr);
         (*failed_count) ++;
         format_sector(db, sector->addr, SECTOR_NOT_COMBINED);
     }
@@ -1611,7 +1611,7 @@ fdb_err_t fdb_kvdb_init(fdb_kvdb_t db, const char *name, const char *part_name, 
 #endif /* FDB_KV_USING_CACHE */
 
     //TODO 更新分区打印
-    FDB_DEBUG("KVDB in partition %s, size is %u bytes.\n", ((fdb_db_t)db)->storage.part->name, db_part_size(db));
+    FDB_DEBUG("KVDB in partition %s, size is %u bytes.\n", ((fdb_db_t)db)->storage.part->name, db_max_size(db));
 
     result = _fdb_kv_load(db);
 
