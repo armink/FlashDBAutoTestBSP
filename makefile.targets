@@ -4,4 +4,4 @@ clean2:
 	-@echo ' '
 
 
-*.elf: $(wildcard E:/Program/RTT/FlashDBAutoTestBSP/link.lds)
+*.elf: $(wildcard E:/program/STM32/FlashDBAutoTestBSP/link.lds)

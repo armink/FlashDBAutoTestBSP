@@ -41,7 +41,8 @@ static void unlock(fdb_db_t db)
 int main(void)
 {
     struct fdb_default_kv default_kv;
-    uint32_t sec_size = 4096;
+    uint32_t sec_size = 4096, db_size = sec_size * 4;
+    bool file_mode = true;
 
     printf("hello rt-thread\n");
 
@@ -52,18 +53,20 @@ int main(void)
     rt_mutex_init(&ts_locker, "fdb_kvdb1", RT_IPC_FLAG_FIFO);
     fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_LOCK, lock);
     fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_UNLOCK, unlock);
-    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_SEC_SIZE, &sec_size);
-    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_FILE_MODE, (void *)true);
-    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_MAX_SIZE, (void *)(sec_size * 4));
-    fdb_kvdb_init(&_global_kvdb, "env", "/fdb_kvdb1", &default_kv, &ts_locker);
+//    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_SEC_SIZE, &sec_size);
+//    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_FILE_MODE, &file_mode);
+//    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_MAX_SIZE, &db_size);
+//    fdb_kvdb_init(&_global_kvdb, "env", "/fdb_kvdb1", &default_kv, &ts_locker);
+    fdb_kvdb_init(&_global_kvdb, "env", "fdb_kvdb1", &default_kv, &ts_locker);
 
     rt_mutex_init(&kv_locker, "fdb_tsdb1", RT_IPC_FLAG_FIFO);
     fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_LOCK, lock);
     fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_UNLOCK, unlock);
-    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
-    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_FILE_MODE, (void *)true);
-    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_MAX_SIZE, (void *)(sec_size * 4));
-    fdb_tsdb_init(&_global_tsdb, "log", "/fdb_tsdb1", get_time, 128, &kv_locker);
+//    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
+//    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_FILE_MODE, &file_mode);
+//    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_MAX_SIZE, &db_size);
+//    fdb_tsdb_init(&_global_tsdb, "log", "/fdb_tsdb1", get_time, 128, &kv_locker);
+    fdb_tsdb_init(&_global_tsdb, "log", "fdb_tsdb1", get_time, 128, &kv_locker);
 
 //    kvdb_type_string_sample();
 //    kvdb_type_blob_sample();

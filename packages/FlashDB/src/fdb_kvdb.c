@@ -369,7 +369,7 @@ static fdb_err_t read_kv(fdb_kvdb_t db, fdb_kv_t kv)
 static fdb_err_t read_sector_info(fdb_kvdb_t db, uint32_t addr, kv_sec_info_t sector, bool traversal)
 {
     fdb_err_t result = FDB_NO_ERR;
-    struct sector_hdr_data sec_hdr;
+    struct sector_hdr_data sec_hdr = { 0 };
 
     FDB_ASSERT(addr % db_sec_size(db) == 0);
     FDB_ASSERT(sector);
@@ -711,7 +711,7 @@ static fdb_err_t write_kv_hdr(fdb_kvdb_t db, uint32_t addr, kv_hdr_data_t kv_hdr
 static fdb_err_t format_sector(fdb_kvdb_t db, uint32_t addr, uint32_t combined_value)
 {
     fdb_err_t result = FDB_NO_ERR;
-    struct sector_hdr_data sec_hdr;
+    struct sector_hdr_data sec_hdr = { 0 };
 
     FDB_ASSERT(addr % db_sec_size(db) == 0);
 
@@ -1551,7 +1551,7 @@ void fdb_kvdb_control(fdb_kvdb_t db, int cmd, void *arg)
 #ifdef FDB_USING_FILE_MODE
         /* this change MUST before database initialization */
         FDB_ASSERT(db->parent.init_ok == false);
-        db->parent.file_mode = (bool)arg;
+        db->parent.file_mode = *(bool *)arg;
 #else
         FDB_INFO("Error: set file mode Failed. Please defined the FDB_USING_FILE_MODE macro.");
 #endif
@@ -1560,7 +1560,7 @@ void fdb_kvdb_control(fdb_kvdb_t db, int cmd, void *arg)
 #ifdef FDB_USING_FILE_MODE
         /* this change MUST before database initialization */
         FDB_ASSERT(db->parent.init_ok == false);
-        db->parent.max_size = (uint32_t)arg;
+        db->parent.max_size = *(uint32_t *)arg;
 #endif
         break;
     }
@@ -1610,8 +1610,7 @@ fdb_err_t fdb_kvdb_init(fdb_kvdb_t db, const char *name, const char *part_name, 
     }
 #endif /* FDB_KV_USING_CACHE */
 
-    //TODO 更新分区打印
-    FDB_DEBUG("KVDB in partition %s, size is %u bytes.\n", ((fdb_db_t)db)->storage.part->name, db_max_size(db));
+    FDB_DEBUG("KVDB size is %u bytes.\n", db_max_size(db));
 
     result = _fdb_kv_load(db);
 

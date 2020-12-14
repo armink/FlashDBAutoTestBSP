@@ -271,16 +271,16 @@ static FILE *open_db_file(fdb_db_t db, uint32_t addr, bool clean)
         if (clean) {
             /* clean the old file */
             db->cur_fp = fopen(path, "wb+");
-            fclose(db->cur_fp);
+            if (db->cur_fp == NULL) {
+                FDB_INFO("Error: open (%s) file failed.\n", path);
+            } else {
+                fclose(db->cur_fp);
+            }
         }
 
         /* open the database file */
         db->cur_fp = fopen(path, "rb+");
         db->cur_sec = sec_addr;
-
-        if (db->cur_fp == NULL) {
-            FDB_INFO("Error: open (%s) file failed.\n", path);
-        }
     }
 
     return db->cur_fp;
@@ -330,6 +330,7 @@ fdb_err_t _fdb_flash_erase(fdb_db_t db, uint32_t addr, size_t size)
             }
             memset(buf, 0xFF, BUF_SIZE);
             fwrite(buf, size - i * BUF_SIZE, 1, fp);
+            fflush(fp);
         } else {
             result = FDB_ERASE_ERR;
         }
