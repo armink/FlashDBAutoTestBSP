@@ -39,6 +39,10 @@ extern "C" {
 #define FDB_KV_USING_CACHE
 #endif
 
+#if defined(FDB_USING_FILE_LIBC_MODE) || defined(FDB_USING_FILE_POSIX_MODE)
+#define FDB_USING_FILE_MODE
+#endif
+
 /* log function. default FDB_PRINT macro is printf() */
 #ifndef FDB_PRINT
 #define FDB_PRINT(...)                 printf(__VA_ARGS__)
@@ -247,7 +251,7 @@ struct fdb_db {
         const struct fal_partition *part;        /**< flash partition for saving database */
 #endif
 #ifdef FDB_USING_FILE_MODE
-        const char *dir;                         /**< directory path for saving database */
+        char *dir;                         /**< directory path for saving database */
 #endif
     } storage;
     uint32_t sec_size;                           /**< flash section size. It's a multiple of block size */
@@ -255,7 +259,7 @@ struct fdb_db {
     bool init_ok;                                /**< initialized successfully */
     bool file_mode;                              /**< is file mode, default is false */
 #ifdef FDB_USING_FILE_MODE
-    FILE *cur_fp;                                /**< current file object */
+    void *cur_fp;                                /**< current file object */
     uint32_t cur_sec;                            /**< current operate sector address  */
 #endif
     void (*lock)(fdb_db_t db);                   /**< lock the database operate */

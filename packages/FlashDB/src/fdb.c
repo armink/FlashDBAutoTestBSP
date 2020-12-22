@@ -41,8 +41,17 @@ fdb_err_t _fdb_init_ex(fdb_db_t db, const char *name, const char *part_name, fdb
         /* must set when using file mode */
         FDB_ASSERT(db->sec_size != 0);
         FDB_ASSERT(db->max_size != 0);
-
-        db->storage.dir = part_name;
+#ifdef FDB_USING_POSIX_MODE
+        db->cur_fp = (void *)-1;
+#else
+        db->cur_fp = (void *)0;
+#endif
+        db->storage.dir = rt_malloc(256);
+        if (db->storage.dir) {
+            strncpy(db->storage.dir, part_name, 256);
+        } else {
+            return -FDB_INIT_FAILED;
+        }
 #endif
     } else {
 #ifdef FDB_USING_FAL_MODE

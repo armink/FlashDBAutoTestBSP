@@ -15,9 +15,9 @@
 #include <rtthread.h>
 
 /* please defined the _global_kvdb and _global_tsdb then remove '#if 0' */
-#if 1
+#if 0
 
-extern struct fdb_kvdb _global_kvdb;
+extern struct fdb_kvdb *_global_kvdb;
 extern struct fdb_tsdb _global_tsdb;
 
 #if defined(RT_USING_FINSH) && defined(FINSH_USING_MSH) && defined(FDB_USING_KVDB)
@@ -35,21 +35,21 @@ static void __setenv(uint8_t argc, char **argv) {
     if (argc == 1) {
         rt_kprintf("Please input: setenv <key> [value]\n");
     } else if (argc == 2) {
-        fdb_kv_set(&_global_kvdb, argv[1], NULL);
+        fdb_kv_set(_global_kvdb, argv[1], NULL);
     } else {
-        fdb_kv_set(&_global_kvdb, argv[1], argv[2]);
+        fdb_kv_set(_global_kvdb, argv[1], argv[2]);
     }
 }
 MSH_CMD_EXPORT_ALIAS(__setenv, setenv, Set an envrionment variable.);
 
 static void printenv(uint8_t argc, char **argv) {
-    fdb_kv_print(&_global_kvdb);
+    fdb_kv_print(_global_kvdb);
 }
 MSH_CMD_EXPORT(printenv, Print all envrionment variables.);
 
 static void getvalue(uint8_t argc, char **argv) {
     char *value = NULL;
-    value = fdb_kv_get(&_global_kvdb, argv[1]);
+    value = fdb_kv_get(_global_kvdb, argv[1]);
     if (value) {
         rt_kprintf("The %s value is %s.\n", argv[1], value);
     } else {
@@ -59,7 +59,7 @@ static void getvalue(uint8_t argc, char **argv) {
 MSH_CMD_EXPORT(getvalue, Get an envrionment variable by name.);
 
 static void resetenv(uint8_t argc, char **argv) {
-    fdb_kv_set_default(&_global_kvdb);
+    fdb_kv_set_default(_global_kvdb);
 }
 MSH_CMD_EXPORT(resetenv, Reset all envrionment variable to default.);
 
