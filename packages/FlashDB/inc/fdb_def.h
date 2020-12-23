@@ -251,7 +251,7 @@ struct fdb_db {
         const struct fal_partition *part;        /**< flash partition for saving database */
 #endif
 #ifdef FDB_USING_FILE_MODE
-        char *dir;                               /**< directory path for saving database */
+        const char *dir;                         /**< directory path for saving database */
 #endif
     } storage;
     uint32_t sec_size;                           /**< flash section size. It's a multiple of block size */

@@ -46,12 +46,8 @@ fdb_err_t _fdb_init_ex(fdb_db_t db, const char *name, const char *part_name, fdb
 #else
         db->cur_file = (void *)0;
 #endif
-        db->storage.dir = rt_malloc(256);
-        if (db->storage.dir) {
-            strncpy(db->storage.dir, part_name, 256);
-        } else {
-            return -FDB_INIT_FAILED;
-        }
+        db->storage.dir = part_name;
+        FDB_ASSERT(strlen(part_name) != 0)
 #endif
     } else {
 #ifdef FDB_USING_FAL_MODE
