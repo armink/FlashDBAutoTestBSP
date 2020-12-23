@@ -22,8 +22,6 @@
 
 fdb_err_t _fdb_init_ex(fdb_db_t db, const char *name, const char *part_name, fdb_db_type type, void *user_data)
 {
-    size_t block_size;
-
     FDB_ASSERT(db);
     FDB_ASSERT(name);
     FDB_ASSERT(part_name);
@@ -51,6 +49,8 @@ fdb_err_t _fdb_init_ex(fdb_db_t db, const char *name, const char *part_name, fdb
 #endif
     } else {
 #ifdef FDB_USING_FAL_MODE
+        size_t block_size;
+
         /* FAL (Flash Abstraction Layer) initialization */
         fal_init();
         /* check the flash partition */

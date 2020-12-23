@@ -43,6 +43,10 @@ extern "C" {
 #define FDB_USING_FILE_MODE
 #endif
 
+#ifndef FDB_WRITE_GRAN
+#define FDB_WRITE_GRAN 1
+#endif
+
 /* log function. default FDB_PRINT macro is printf() */
 #ifndef FDB_PRINT
 #define FDB_PRINT(...)                 printf(__VA_ARGS__)
