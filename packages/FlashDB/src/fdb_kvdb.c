@@ -1553,7 +1553,7 @@ void fdb_kvdb_control(fdb_kvdb_t db, int cmd, void *arg)
         FDB_ASSERT(db->parent.init_ok == false);
         db->parent.file_mode = *(bool *)arg;
 #else
-        FDB_INFO("Error: set file mode Failed. Please defined the FDB_USING_FILE_MODE macro.");
+        FDB_INFO("Error: set file mode Failed. Please defined the FDB_USING_FILE_MODE macro.\n");
 #endif
         break;
     case FDB_KVDB_CTRL_SET_MAX_SIZE:
