@@ -251,7 +251,7 @@ struct fdb_db {
         const struct fal_partition *part;        /**< flash partition for saving database */
 #endif
 #ifdef FDB_USING_FILE_MODE
-        char *dir;                         /**< directory path for saving database */
+        char *dir;                               /**< directory path for saving database */
 #endif
     } storage;
     uint32_t sec_size;                           /**< flash section size. It's a multiple of block size */
@@ -259,7 +259,7 @@ struct fdb_db {
     bool init_ok;                                /**< initialized successfully */
     bool file_mode;                              /**< is file mode, default is false */
 #ifdef FDB_USING_FILE_MODE
-    void *cur_fp;                                /**< current file object */
+    void *cur_file;                              /**< current file object */
     uint32_t cur_sec;                            /**< current operate sector address  */
 #endif
     void (*lock)(fdb_db_t db);                   /**< lock the database operate */

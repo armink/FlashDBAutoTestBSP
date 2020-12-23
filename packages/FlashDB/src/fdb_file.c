@@ -37,7 +37,7 @@ static void get_db_file_path(fdb_db_t db, uint32_t addr, char *path, size_t size
 static int open_db_file(fdb_db_t db, uint32_t addr, bool clean)
 {
     uint32_t sec_addr = RT_ALIGN_DOWN(addr, db->sec_size);
-    int fd = (int)db->cur_fp;
+    int fd = (int)db->cur_file;
     char path[DB_PATH_MAX];
 
     if (sec_addr != db->cur_sec || fd <= 0 || clean) {
@@ -62,9 +62,9 @@ static int open_db_file(fdb_db_t db, uint32_t addr, bool clean)
         fd = open(path, O_RDWR, 0);
         db->cur_sec = sec_addr;
     }
-    db->cur_fp = (void *)fd;
+    db->cur_file = (void *)fd;
 
-    return (int)db->cur_fp;
+    return (int)db->cur_file;
 }
 
 fdb_err_t _fdb_file_read(fdb_db_t db, uint32_t addr, void *buf, size_t size)
@@ -124,31 +124,31 @@ static FILE *open_db_file(fdb_db_t db, uint32_t addr, bool clean)
 {
     uint32_t sec_addr = FDB_ALIGN_DOWN(addr, db->sec_size);
 
-    if (sec_addr != db->cur_sec || db->cur_fp == NULL || clean) {
+    if (sec_addr != db->cur_sec || db->cur_file == NULL || clean) {
         char path[DB_PATH_MAX];
 
         get_db_file_path(db, addr, path, DB_PATH_MAX);
 
-        if (db->cur_fp) {
-            fclose(db->cur_fp);
+        if (db->cur_file) {
+            fclose(db->cur_file);
         }
 
         if (clean) {
             /* clean the old file */
-            db->cur_fp = fopen(path, "wb+");
-            if (db->cur_fp == NULL) {
+            db->cur_file = fopen(path, "wb+");
+            if (db->cur_file == NULL) {
                 FDB_INFO("Error: open (%s) file failed.\n", path);
             } else {
-                fclose(db->cur_fp);
+                fclose(db->cur_file);
             }
         }
 
         /* open the database file */
-        db->cur_fp = fopen(path, "rb+");
+        db->cur_file = fopen(path, "rb+");
         db->cur_sec = sec_addr;
     }
 
-    return db->cur_fp;
+    return db->cur_file;
 }
 
 fdb_err_t _fdb_file_read(fdb_db_t db, uint32_t addr, void *buf, size_t size)
