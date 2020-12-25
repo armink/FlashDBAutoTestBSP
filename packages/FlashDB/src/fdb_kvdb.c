@@ -361,6 +361,10 @@ static fdb_err_t read_kv(fdb_kvdb_t db, fdb_kv_t kv)
         kv->addr.value = kv_name_addr + FDB_WG_ALIGN(kv_hdr.name_len);
         kv->value_len = kv_hdr.value_len;
         kv->name_len = kv_hdr.name_len;
+        if (kv_hdr.name_len >= sizeof(kv->name) / sizeof(kv->name[0])) {
+            kv_hdr.name_len = sizeof(kv->name) / sizeof(kv->name[0]) - 1;
+        }
+        kv->name[kv_hdr.name_len] = '\0';
     }
 
     return result;
@@ -1553,7 +1557,7 @@ void fdb_kvdb_control(fdb_kvdb_t db, int cmd, void *arg)
         FDB_ASSERT(db->parent.init_ok == false);
         db->parent.file_mode = *(bool *)arg;
 #else
-        FDB_INFO("Error: set file mode Failed. Please defined the FDB_USING_FILE_MODE macro.\n");
+        FDB_INFO("Error: set file mode Failed. Please defined the FDB_USING_FILE_MODE macro.");
 #endif
         break;
     case FDB_KVDB_CTRL_SET_MAX_SIZE:
