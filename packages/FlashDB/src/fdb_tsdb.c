@@ -700,7 +700,7 @@ void fdb_tsdb_control(fdb_tsdb_t db, int cmd, void *arg)
         FDB_ASSERT(db->parent.init_ok == false);
         db->parent.file_mode = *(bool *)arg;
 #else
-        FDB_INFO("Error: set file mode Failed. Please defined the FDB_USING_FILE_MODE macro.\n");
+        FDB_INFO("Error: set file mode Failed. Please defined the FDB_USING_FILE_MODE macro.");
 #endif
         break;
     case FDB_TSDB_CTRL_SET_MAX_SIZE:

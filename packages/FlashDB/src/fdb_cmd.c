@@ -15,7 +15,7 @@
 #include <rtthread.h>
 
 /* please defined the _global_kvdb and _global_tsdb then remove '#if 0' */
-#if 0
+#if 1
 
 extern struct fdb_kvdb *_global_kvdb;
 extern struct fdb_tsdb _global_tsdb;
