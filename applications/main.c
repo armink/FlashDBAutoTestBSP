@@ -24,9 +24,11 @@ static fdb_time_t get_time(void)
     return time++;
 }
 
-struct fdb_kvdb _global_kvdb;
-struct fdb_tsdb _global_tsdb;
-struct rt_mutex kv_locker, ts_locker;
+static struct fdb_kvdb kvdb;
+static struct fdb_tsdb tsdb;
+struct fdb_kvdb *_global_kvdb = &kvdb;
+struct fdb_tsdb *_global_tsdb = &tsdb;
+static struct rt_mutex kv_locker, ts_locker;
 
 static void lock(fdb_db_t db)
 {
@@ -51,20 +53,21 @@ int main(void)
     default_kv.kvs = default_kv_set;
     default_kv.num = sizeof(default_kv_set) / sizeof(default_kv_set[0]);
     rt_mutex_init(&ts_locker, "fdb_kvdb1", RT_IPC_FLAG_FIFO);
-    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_LOCK, lock);
-    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_UNLOCK, unlock);
-//    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_SEC_SIZE, &sec_size);
-//    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_FILE_MODE, &file_mode);
-//    fdb_kvdb_control(&_global_kvdb, FDB_KVDB_CTRL_SET_MAX_SIZE, &db_size);
-//    fdb_kvdb_init(&_global_kvdb, "env", "/fdb_kvdb1", &default_kv, &ts_locker);
-    fdb_kvdb_init(&_global_kvdb, "env", "fdb_kvdb1", &default_kv, &ts_locker);
+    fdb_kvdb_control(_global_kvdb, FDB_KVDB_CTRL_SET_LOCK, lock);
+    fdb_kvdb_control(_global_kvdb, FDB_KVDB_CTRL_SET_UNLOCK, unlock);
+    fdb_kvdb_control(_global_kvdb, FDB_KVDB_CTRL_SET_SEC_SIZE, &sec_size);
+    fdb_kvdb_control(_global_kvdb, FDB_KVDB_CTRL_SET_FILE_MODE, &file_mode);
+    fdb_kvdb_control(_global_kvdb, FDB_KVDB_CTRL_SET_MAX_SIZE, &db_size);
+//    fdb_kvdb_control(_global_kvdb, FDB_KVDB_CTRL_SET_NOT_FORMAT, &file_mode);
+    fdb_kvdb_init(_global_kvdb, "env", "/fdb_kvdb1", &default_kv, &ts_locker);
+//    fdb_kvdb_init(_global_kvdb, "env", "test", &default_kv, &ts_locker);
 
     rt_mutex_init(&kv_locker, "fdb_tsdb1", RT_IPC_FLAG_FIFO);
     fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_LOCK, lock);
     fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_UNLOCK, unlock);
-//    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
-//    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_FILE_MODE, &file_mode);
-//    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_MAX_SIZE, &db_size);
+    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
+    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_FILE_MODE, &file_mode);
+    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_MAX_SIZE, &db_size);
 //    fdb_tsdb_init(&_global_tsdb, "log", "/fdb_tsdb1", get_time, 128, &kv_locker);
     fdb_tsdb_init(&_global_tsdb, "log", "fdb_tsdb1", get_time, 128, &kv_locker);
 
@@ -72,7 +75,90 @@ int main(void)
 //    kvdb_type_blob_sample();
 //    tsdb_sample();
 
+//    github_issue56_test();
+
     return 0;
+}
+
+
+struct env_status {
+    int temp;
+    int humi;
+};
+
+static bool query_cb(fdb_tsl_t tsl, void *arg)
+{
+#define FDB_LOG_TAG "[issue]"
+
+    struct fdb_blob blob;
+    struct env_status status;
+    fdb_tsdb_t db = arg;
+
+    fdb_blob_read((fdb_db_t) db, fdb_tsl_to_blob(tsl, fdb_blob_make(&blob, &status, sizeof(status))));
+    FDB_INFO("[query_cb] queried a TSL: time: %ld, status: %d, temp: %d, humi: %d\n", tsl->time, tsl->status, status.temp, status.humi);
+
+    return false;
+}
+
+static bool set_status_delete_cb(fdb_tsl_t tsl, void *arg)
+{
+    fdb_tsdb_t db = arg;
+
+    FDB_INFO("set the TSL (time %ld) status from %d to %d\n", tsl->time, tsl->status, FDB_TSL_DELETED);
+    fdb_tsl_set_status(db, tsl, FDB_TSL_DELETED);
+
+    return false;
+}
+
+void github_issue56_test(void)
+{
+#define FDB_LOG_TAG "[issue]"
+
+    fdb_tsdb_t tsdb = &_global_tsdb;
+    struct fdb_blob blob;
+
+    { /* APPEND new TSL (time series log) */
+        struct env_status status;
+
+        for (int i = 0; i < 10; i++)
+        {
+            status.temp = 48 + i;
+            status.humi = 100 + i;
+            fdb_tsl_append(tsdb, fdb_blob_make(&blob, &status, sizeof(status)));
+            FDB_INFO("append the new status.temp (%d) and status.humi (%d)\n", status.temp, status.humi);
+        }
+        fdb_tsl_iter(tsdb, query_cb, tsdb);
+    }
+
+    { /* APPEND new TSL (time series log) */
+        struct env_status status;
+
+        for (int i = 0; i < 10; i++)
+        {
+            status.temp = 48 + i;
+            status.humi = 100 + i;
+            fdb_tsl_append(tsdb, fdb_blob_make(&blob, &status, sizeof(status)));
+            FDB_INFO("append the new status.temp (%d) and status.humi (%d)\n", status.temp, status.humi);
+        }
+        fdb_tsl_iter(tsdb, query_cb, tsdb);
+    }
+
+    fdb_tsl_clean(tsdb);
+    fdb_tsl_iter(tsdb, set_status_delete_cb, tsdb);
+    fdb_tsl_iter(tsdb, query_cb, tsdb);
+
+    { /* APPEND new TSL (time series log) */
+        struct env_status status;
+
+        for (int i = 0; i < 10; i++)
+        {
+            status.temp = 48 + i;
+            status.humi = 100 + i;
+            fdb_tsl_append(tsdb, fdb_blob_make(&blob, &status, sizeof(status)));
+            FDB_INFO("append the new status.temp (%d) and status.humi (%d)\n", status.temp, status.humi);
+        }
+        fdb_tsl_iter(tsdb, query_cb, tsdb);
+    }
 }
 
 
@@ -104,10 +190,10 @@ void big_env_blob_test()
         value[i] = i % 256;
     }
 
-    result =  fdb_kv_set_blob(&_global_kvdb, "big_env", fdb_blob_make(&blob, value, ENV_SIZE));
+    result =  fdb_kv_set_blob(_global_kvdb, "big_env", fdb_blob_make(&blob, value, ENV_SIZE));
     rt_kprintf("fdb_set_env_blob return: %d, size: %d\n", result, ENV_SIZE);
 
-    return_len = fdb_kv_get_blob(&_global_kvdb, "big_env", fdb_blob_make(&blob, read_value, ENV_SIZE));
+    return_len = fdb_kv_get_blob(_global_kvdb, "big_env", fdb_blob_make(&blob, read_value, ENV_SIZE));
     rt_kprintf("fdb_get_env_blob return: %d, saved_value_len: %d\n", return_len, blob.saved.len);
 
     rt_kprintf("memcmp result: %d\n", memcmp(value, read_value, ENV_SIZE));
