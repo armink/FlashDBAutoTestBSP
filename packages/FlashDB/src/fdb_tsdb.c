@@ -423,6 +423,7 @@ void fdb_tsl_iter(fdb_tsdb_t db, fdb_tsl_cb cb, void *arg)
     sec_addr = db->oldest_addr;
     /* search all sectors */
     do {
+        traversed_len += db_sec_size(db);
         if (read_sector_info(db, sec_addr, &sector, false) != FDB_NO_ERR) {
             continue;
         }
@@ -442,7 +443,6 @@ void fdb_tsl_iter(fdb_tsdb_t db, fdb_tsl_cb cb, void *arg)
                 }
             } while ((tsl.addr.index = get_next_tsl_addr(&sector, &tsl)) != FAILED_ADDR);
         }
-        traversed_len += db_sec_size(db);
     } while ((sec_addr = get_next_sector_addr(db, &sector, traversed_len)) != FAILED_ADDR);
 }
 
@@ -476,6 +476,7 @@ void fdb_tsl_iter_by_time(fdb_tsdb_t db, fdb_time_t from, fdb_time_t to, fdb_tsl
     sec_addr = oldest_addr;
     /* search all sectors */
     do {
+        traversed_len += db_sec_size(db);
         if (read_sector_info(db, sec_addr, &sector, false) != FDB_NO_ERR) {
             continue;
         }
@@ -517,7 +518,6 @@ void fdb_tsl_iter_by_time(fdb_tsdb_t db, fdb_time_t from, fdb_time_t to, fdb_tsl
         } else if (sector.status == FDB_SECTOR_STORE_EMPTY) {
             return;
         }
-        traversed_len += db_sec_size(db);
     } while ((sec_addr = get_next_sector_addr(db, &sector, traversed_len)) != FAILED_ADDR);
 }
 
@@ -710,11 +710,6 @@ void fdb_tsdb_control(fdb_tsdb_t db, int cmd, void *arg)
         db->parent.max_size = *(uint32_t *)arg;
 #endif
         break;
-    case FDB_TSDB_CTRL_SET_NOT_FORMAT:
-        /* this change MUST before database initialization */
-        FDB_ASSERT(db->parent.init_ok == false);
-        db->parent.not_formatable = *(bool *)arg;
-        break;
     }
 }
 
@@ -757,12 +752,7 @@ fdb_err_t fdb_tsdb_init(fdb_tsdb_t db, const char *name, const char *part_name, 
     sector_iterator(db, &sector, FDB_SECTOR_STORE_UNUSED, &check_sec_arg, NULL, check_sec_hdr_cb, true);
     /* format all sector when check failed */
     if (check_sec_arg.check_failed) {
-        if (db->parent.not_formatable) {
-            result = FDB_READ_ERR;
-            goto __exit;
-        } else {
-            tsl_format_all(db);
-        }
+        tsl_format_all(db);
     } else {
         uint32_t latest_addr;
         if (check_sec_arg.empty_num > 0) {
@@ -803,20 +793,6 @@ __exit:
     _fdb_init_finish((fdb_db_t)db, result);
 
     return result;
-}
-
-/**
- * The time series database deinitialization.
- *
- * @param db database object
- *
- * @return result
- */
-fdb_err_t fdb_tsdb_deinit(fdb_tsdb_t db)
-{
-    _fdb_deinit((fdb_db_t) db);
-
-    return FDB_NO_ERR;
 }
 
 #endif /* defined(FDB_USING_TSDB) */

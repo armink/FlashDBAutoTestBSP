@@ -19,6 +19,9 @@
 
 #include <mmu.h>
 
+
+#include <rtdbg.h>
+
 struct mem_desc platform_mem_desc[] = {
     {0x10000000, 0x50000000, 0x10000000, DEVICE_MEM},
     {0x60000000, 0xe0000000, 0x60000000, NORMAL_MEM}
@@ -49,6 +52,10 @@ void rt_hw_board_init(void)
     rt_console_set_device(RT_CONSOLE_DEVICE_NAME);
 
     rt_thread_idle_sethook(idle_wfi);
+
+    LOG_E("qweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqe");
+    LOG_E("qweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqe");
+    LOG_E("qweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqeqweqweqe");
 
 #ifdef RT_USING_SMP
     /* install IPI handle */
