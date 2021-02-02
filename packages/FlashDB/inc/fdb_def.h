@@ -282,6 +282,9 @@ struct fdb_kvdb {
     struct fdb_default_kv default_kvs;           /**< default KV */
     bool gc_request;                             /**< request a GC check */
     bool in_recovery_check;                      /**< is in recovery check status when first reboot */
+    struct fdb_kv cur_kv;
+    struct kvdb_sec_info cur_sector;
+    bool last_is_complete_del;
 
 #ifdef FDB_KV_USING_CACHE
     /* KV cache table */

@@ -849,7 +849,6 @@ static fdb_err_t del_kv(fdb_kvdb_t db, const char *key, fdb_kv_t old_kv, bool co
 {
     fdb_err_t result = FDB_NO_ERR;
     uint32_t dirty_status_addr;
-    static bool last_is_complete_del = false;
 
     uint8_t status_table[KV_STATUS_TABLE_SIZE >= FDB_DIRTY_STATUS_TABLE_SIZE ? KV_STATUS_TABLE_SIZE : FDB_DIRTY_STATUS_TABLE_SIZE];
 
@@ -867,11 +866,11 @@ static fdb_err_t del_kv(fdb_kvdb_t db, const char *key, fdb_kv_t old_kv, bool co
     /* change and save the new status */
     if (!complete_del) {
         result = _fdb_write_status((fdb_db_t)db, old_kv->addr.start, status_table, FDB_KV_STATUS_NUM, FDB_KV_PRE_DELETE);
-        last_is_complete_del = true;
+        db->last_is_complete_del = true;
     } else {
         result = _fdb_write_status((fdb_db_t)db, old_kv->addr.start, status_table, FDB_KV_STATUS_NUM, FDB_KV_DELETED);
 
-        if (!last_is_complete_del && result == FDB_NO_ERR) {
+        if (!db->last_is_complete_del && result == FDB_NO_ERR) {
 #ifdef FDB_KV_USING_CACHE
             /* delete the KV in flash and cache */
             if (key != NULL) {
@@ -884,7 +883,7 @@ static fdb_err_t del_kv(fdb_kvdb_t db, const char *key, fdb_kv_t old_kv, bool co
 #endif /* FDB_KV_USING_CACHE */
         }
 
-        last_is_complete_del = false;
+        db->last_is_complete_del = false;
     }
 
     dirty_status_addr = FDB_ALIGN_DOWN(old_kv->addr.start, db_sec_size(db)) + SECTOR_DIRTY_OFFSET;
@@ -1185,29 +1184,27 @@ fdb_err_t fdb_kv_del(fdb_kvdb_t db, const char *key)
 static fdb_err_t set_kv(fdb_kvdb_t db, const char *key, const void *value_buf, size_t buf_len)
 {
     fdb_err_t result = FDB_NO_ERR;
-    static struct fdb_kv kv;
-    static struct kvdb_sec_info sector;
     bool kv_is_found = false;
 
     if (value_buf == NULL) {
         result = del_kv(db, key, NULL, true);
     } else {
         /* make sure the flash has enough space */
-        if (new_kv_ex(db, &sector, strlen(key), buf_len) == FAILED_ADDR) {
+        if (new_kv_ex(db, &db->cur_sector, strlen(key), buf_len) == FAILED_ADDR) {
             return FDB_SAVED_FULL;
         }
-        kv_is_found = find_kv(db, key, &kv);
+        kv_is_found = find_kv(db, key, &db->cur_kv);
         /* prepare to delete the old KV */
         if (kv_is_found) {
-            result = del_kv(db, key, &kv, false);
+            result = del_kv(db, key, &db->cur_kv, false);
         }
         /* create the new KV */
         if (result == FDB_NO_ERR) {
-            result = create_kv_blob(db, &sector, key, value_buf, buf_len);
+            result = create_kv_blob(db, &db->cur_sector, key, value_buf, buf_len);
         }
         /* delete the old KV */
         if (kv_is_found && result == FDB_NO_ERR) {
-            result = del_kv(db, key, &kv, true);
+            result = del_kv(db, key, &db->cur_kv, true);
         }
         /* process the GC after set KV */
         if (db->gc_request) {
@@ -1397,13 +1394,11 @@ static void kv_auto_update(fdb_kvdb_t db)
     if (get_kv(db, VER_NUM_KV_NAME, &saved_ver_num, sizeof(size_t), NULL) > 0) {
         /* check version number */
         if (saved_ver_num != setting_ver_num) {
-            struct fdb_kv kv;
             size_t i, value_len;
-            struct kvdb_sec_info sector;
             FDB_DEBUG("Update the KV from version %zu to %zu.\n", saved_ver_num, setting_ver_num);
             for (i = 0; i < db->default_kvs.num; i++) {
                 /* add a new KV when it's not found */
-                if (!find_kv(db, db->default_kvs.kvs[i].key, &kv)) {
+                if (!find_kv(db, db->default_kvs.kvs[i].key, &db->cur_kv)) {
                     /* It seems to be a string when value length is 0.
                      * This mechanism is for compatibility with older versions (less then V4.0). */
                     if (db->default_kvs.kvs[i].value_len == 0) {
@@ -1411,8 +1406,8 @@ static void kv_auto_update(fdb_kvdb_t db)
                     } else {
                         value_len = db->default_kvs.kvs[i].value_len;
                     }
-                    sector.empty_kv = FAILED_ADDR;
-                    create_kv_blob(db, &sector, db->default_kvs.kvs[i].key, db->default_kvs.kvs[i].value, value_len);
+                    db->cur_sector.empty_kv = FAILED_ADDR;
+                    create_kv_blob(db, &db->cur_sector, db->default_kvs.kvs[i].key, db->default_kvs.kvs[i].value, value_len);
                 }
             }
         } else {
@@ -1596,6 +1591,7 @@ fdb_err_t fdb_kvdb_init(fdb_kvdb_t db, const char *name, const char *part_name, 
 
     db->gc_request = false;
     db->in_recovery_check = false;
+    db->last_is_complete_del = false;
     db->default_kvs = *default_kv;
     /* there is at least one empty sector for GC. */
     FDB_ASSERT((FDB_GC_EMPTY_SEC_THRESHOLD > 0 && FDB_GC_EMPTY_SEC_THRESHOLD < SECTOR_NUM))
