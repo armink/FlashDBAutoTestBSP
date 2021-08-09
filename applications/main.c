@@ -63,13 +63,13 @@ int main(void)
 //    fdb_kvdb_init(_global_kvdb, "env", "test", &default_kv, &ts_locker);
 
     rt_mutex_init(&kv_locker, "fdb_tsdb1", RT_IPC_FLAG_FIFO);
-    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_LOCK, lock);
-    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_UNLOCK, unlock);
-    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
-    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_FILE_MODE, &file_mode);
-    fdb_tsdb_control(&_global_tsdb, FDB_TSDB_CTRL_SET_MAX_SIZE, &db_size);
-    fdb_tsdb_init(&_global_tsdb, "log", "fdb_tsdb1", get_time, 128, &kv_locker);
-//    fdb_tsdb_init(&_global_tsdb, "log", "fdb_tsdb1", get_time, 128, &kv_locker);
+    fdb_tsdb_control(_global_tsdb, FDB_TSDB_CTRL_SET_LOCK, lock);
+    fdb_tsdb_control(_global_tsdb, FDB_TSDB_CTRL_SET_UNLOCK, unlock);
+    fdb_tsdb_control(_global_tsdb, FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
+    fdb_tsdb_control(_global_tsdb, FDB_TSDB_CTRL_SET_FILE_MODE, &file_mode);
+    fdb_tsdb_control(_global_tsdb, FDB_TSDB_CTRL_SET_MAX_SIZE, &db_size);
+    fdb_tsdb_init(_global_tsdb, "log", "fdb_tsdb1", get_time, 128, &kv_locker);
+//    fdb_tsdb_init(_global_tsdb, "log", "fdb_tsdb1", get_time, 128, &kv_locker);
 
 //    kvdb_type_string_sample();
 //    kvdb_type_blob_sample();
