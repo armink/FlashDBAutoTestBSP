@@ -44,7 +44,7 @@ int main(void)
 {
     struct fdb_default_kv default_kv;
     uint32_t sec_size = 4096, db_size = sec_size * 4;
-    bool file_mode = true;
+    bool file_mode = false;
 
     printf("hello rt-thread\n");
 
