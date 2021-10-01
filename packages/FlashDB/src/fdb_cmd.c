@@ -23,45 +23,259 @@ extern struct fdb_tsdb _global_tsdb;
 #if defined(RT_USING_FINSH) && defined(FINSH_USING_MSH) && defined(FDB_USING_KVDB)
 #include <finsh.h>
 #if defined(FDB_USING_KVDB)
-static void __setenv(uint8_t argc, char **argv) {
-    uint8_t i;
-
-    if (argc > 3) {
-        /* environment variable value string together */
-        for (i = 0; i < argc - 2; i++) {
-            argv[2 + i][rt_strlen(argv[2 + i])] = ' ';
+static void kvdb_cmd_bench(fdb_kvdb_t db)
+{
+    off_t i;
+    rt_tick_t start_tick, end_tick;
+    char key[10] = { 0 }, value[10] = { 0 };
+#define TEST_COUNT 48
+    /* add KVs */
+    start_tick = rt_tick_get();
+    for (i = 0; i < TEST_COUNT; i++) {
+        rt_snprintf(key, sizeof(key), "key:%d", i);
+        rt_snprintf(value, sizeof(value), "value:%d", i);
+        fdb_kv_set(db, key, value);
+    }
+    end_tick = rt_tick_get();
+    rt_kprintf("%d KVs has been added  , total %d tick, avg %d tick/per\n", TEST_COUNT, end_tick - start_tick,
+            (end_tick - start_tick) / TEST_COUNT);
+    /* get KVs */
+    start_tick = rt_tick_get();
+    for (i = 0; i < TEST_COUNT; i++) {
+        char *new_value;
+        rt_snprintf(key, sizeof(key), "key:%d", i);
+        rt_snprintf(value, sizeof(value), "value:%d", i);
+        new_value = fdb_kv_get(db, key);
+        if (strncmp(new_value, value, sizeof(value)) != 0)
+        {
+            rt_kprintf("ERROR: get KV failed, %s != %s\n", value, new_value);
         }
     }
-    if (argc == 1) {
-        rt_kprintf("Please input: setenv <key> [value]\n");
-    } else if (argc == 2) {
-        fdb_kv_set(&_global_kvdb, argv[1], NULL);
-    } else {
-        fdb_kv_set(&_global_kvdb, argv[1], argv[2]);
+    end_tick = rt_tick_get();
+    rt_kprintf("%d KVs has been queried, total %d tick, avg %d tick/per\n", TEST_COUNT, end_tick - start_tick,
+            (end_tick - start_tick) / TEST_COUNT);
+    /* delete KVs */
+    start_tick = rt_tick_get();
+    for (i = 0; i < TEST_COUNT; i++) {
+        rt_snprintf(key, sizeof(key), "key:%d", i);
+        fdb_kv_del(db, key);
+    }
+    end_tick = rt_tick_get();
+    rt_kprintf("%d KVs has been deleted, total %d tick, avg %d tick/per\n", TEST_COUNT, end_tick - start_tick,
+            (end_tick - start_tick) / TEST_COUNT);
+}
+
+static void kvdb(uint8_t argc, char **argv)
+{
+#define KVDB_CMD_PROBE_INDEX0           0
+#define KVDB_CMD_PROBE_INDEX1           1
+#define KVDB_CMD_SHOW_INDEX             2
+#define KVDB_CMD_SET_INDEX              3
+#define KVDB_CMD_DEL_INDEX              4
+#define KVDB_CMD_RESET_INDEX            5
+#define KVDB_CMD_CLOSE_INDEX            6
+#define KVDB_CMD_BENCH_INDEX            7
+
+    size_t i = 0;
+    fdb_err_t err = FDB_NO_ERR;
+    static struct fdb_kvdb static_kvdb = { 0 };
+    static char dev_name[FDB_KV_NAME_MAX] = { 0 };
+    static char part_name[FDB_KV_NAME_MAX] = { 0 };
+
+    const char* help_info[] =
+    {
+            [KVDB_CMD_PROBE_INDEX0]     = "kvdb probe [partition]               - probe KVDB by given KVDB partition",
+            [KVDB_CMD_PROBE_INDEX1]     = "kvdb probe [kvdb_name] [file_path] [sec_size] [db_size] - probe KVDB by given KVDB name and file path",
+            [KVDB_CMD_SHOW_INDEX]       = "kvdb show                            - show all KV data.",
+            [KVDB_CMD_SET_INDEX]        = "kvdb set [key] [value]               - set value of a key.",
+            [KVDB_CMD_DEL_INDEX]        = "kvdb del [key]                       - delete an KV.",
+            [KVDB_CMD_RESET_INDEX]      = "kvdb reset                           - recovery all KV to default.",
+            [KVDB_CMD_CLOSE_INDEX]      = "kvdb deinit                          - deinit the KVDB",
+            [KVDB_CMD_BENCH_INDEX]      = "kvdb bench                           - benchmark test",
+    };
+
+    if (argc < 2)
+    {
+        rt_kprintf("Usage:\n");
+        for (i = 0; i < sizeof(help_info) / sizeof(char*); i++)
+        {
+            rt_kprintf("%s\n", help_info[i]);
+        }
+        rt_kprintf("\n");
+    }
+    else
+    {
+        const char *operator = argv[1];
+
+        if (!strcmp(operator, "probe"))
+        {
+            if (static_kvdb.parent.init_ok)
+            {
+                /* Close the last open KVDB */
+                fdb_kvdb_deinit(&static_kvdb);
+            }
+
+            if (argc >= 3)
+            {
+                bool not_formatable = RT_TRUE;
+                bool file_mode = RT_TRUE;
+
+                memset(&static_kvdb, 0, sizeof(static_kvdb));
+
+                if (argc >= 6)
+                {
+                    /* file path */
+                    uint32_t sec_size = atoi(argv[4]);
+                    uint32_t db_size = atoi(argv[5]);
+
+                    rt_strncpy(dev_name, argv[2], FDB_KV_NAME_MAX);
+                    dev_name[FDB_KV_NAME_MAX-1] = '\0';
+                    rt_strncpy(part_name, argv[3], FDB_KV_NAME_MAX);
+                    part_name[FDB_KV_NAME_MAX-1] = '\0';
+
+                    if ((sec_size == 0)||(db_size == 0)||(sec_size * 2 > db_size))
+                    {
+                        rt_kprintf("The following conditions must be met:\n");
+                        rt_kprintf("(sec_size != 0) and (db_size != 0) and (db_size/sec_size > 2)\n");
+                        rt_kprintf("Usage: %s.\n", help_info[KVDB_CMD_PROBE_INDEX0]);
+                        rt_kprintf("       %s.\n", help_info[KVDB_CMD_PROBE_INDEX1]);
+                        return;
+                    }
+                    fdb_kvdb_control(&static_kvdb, FDB_KVDB_CTRL_SET_SEC_SIZE, &sec_size);
+                    fdb_kvdb_control(&static_kvdb, FDB_KVDB_CTRL_SET_FILE_MODE, &file_mode);
+                    fdb_kvdb_control(&static_kvdb, FDB_KVDB_CTRL_SET_MAX_SIZE, &db_size);
+                }
+                else
+                {
+#ifdef FDB_USING_FAL_MODE
+                    /* partition */
+                    rt_strncpy(dev_name, argv[2], FDB_KV_NAME_MAX);
+                    dev_name[FDB_KV_NAME_MAX-1] = '\0';
+                    rt_strncpy(part_name, argv[2], FDB_KV_NAME_MAX);
+                    part_name[FDB_KV_NAME_MAX-1] = '\0';
+
+                    /* fdb partition */
+                    if (fal_partition_find(part_name) == NULL)
+                    {
+                        rt_kprintf("The '%s' partition not found!\n", part_name);
+                        rt_kprintf("Usage: %s.\n", help_info[KVDB_CMD_PROBE_INDEX0]);
+                        rt_kprintf("       %s.\n", help_info[KVDB_CMD_PROBE_INDEX1]);
+                        return;
+                    }
+#else
+                    rt_kprintf("Usage: %s.\n", help_info[KVDB_CMD_PROBE_INDEX1]);
+                    return;
+#endif
+                }
+                fdb_kvdb_control(&static_kvdb, FDB_KVDB_CTRL_SET_NOT_FORMAT, &not_formatable);
+                err = fdb_kvdb_init(&static_kvdb, dev_name, part_name, NULL, NULL);
+                if (err != FDB_NO_ERR)
+                {
+                    rt_kprintf("KVDB '%s' not found. Probe failed!\n", dev_name);
+                    rt_kprintf("Usage: %s.\n", help_info[KVDB_CMD_PROBE_INDEX0]);
+                    rt_kprintf("       %s.\n", help_info[KVDB_CMD_PROBE_INDEX1]);
+                }
+                else
+                {
+                    rt_kprintf("Probed a KVDB | %s | part_name: %s | sec_size: %d | max_size: %d |.\n", static_kvdb.parent.name,
+                        part_name, static_kvdb.parent.sec_size, static_kvdb.parent.max_size);
+                }
+            }
+            else
+            {
+                rt_kprintf("No KVDB was probed!\n");
+                rt_kprintf("Usage: %s.\n", help_info[KVDB_CMD_PROBE_INDEX0]);
+                rt_kprintf("       %s.\n", help_info[KVDB_CMD_PROBE_INDEX1]);
+            }
+        }
+        else
+        {
+            if (!static_kvdb.parent.init_ok)
+            {
+                rt_kprintf("No KVDB was probed! Please run 'kvdb probe [kvdb_name] [part_name]'.\n");
+                return;
+            }
+
+            if (!rt_strcmp(operator, "show"))
+            {
+                rt_kprintf("Read data success. The KV data is:\n");
+                rt_kprintf("----------------------------------\n");
+                fdb_kv_print(&static_kvdb);
+            }
+            else if (!rt_strcmp(operator, "set"))
+            {
+                if (argc > 3)
+                {
+                    err = fdb_kv_set(&static_kvdb, argv[2], argv[3]);
+                    if (err != FDB_NO_ERR)
+                    {
+                        rt_kprintf("set the KV '%s' failed!\n", argv[2]);
+                    }
+                    else
+                    {
+                        rt_kprintf("set the KV '%s', value is: %s\n", argv[2], argv[3]);
+                    }
+                }
+                else
+                {
+                    rt_kprintf("Usage: %s.\n", help_info[KVDB_CMD_SET_INDEX]);
+                }
+            }
+            else if (!rt_strcmp(operator, "del"))
+            {
+                if (argc >= 3)
+                {
+                    err = fdb_kv_del(&static_kvdb, argv[2]);
+                    if (err == FDB_KV_NAME_ERR)
+                    {
+                        rt_kprintf("Not found '%s' in KV!\n", argv[2]);
+                    }
+                    else if (err == FDB_NO_ERR)
+                    {
+                        rt_kprintf("delete the KV '%s' success.\n", argv[2]);
+                    }
+                    else
+                    {
+                        rt_kprintf("delete the KV '%s' failed!\n", argv[2]);
+                    }
+                }
+                else
+                {
+                    rt_kprintf("Usage: %s.\n", help_info[KVDB_CMD_DEL_INDEX]);
+                }
+            }
+            else if (!rt_strcmp(operator, "reset"))
+            {
+                fdb_kv_set_default(&static_kvdb);
+                rt_kprintf("KVDB '%s' reset success.\n", static_kvdb.parent.name);
+            }
+            else if (!rt_strcmp(operator, "deinit"))
+            {
+                if (static_kvdb.parent.init_ok)
+                {
+                    /* deinit the KVDB */
+                    fdb_kvdb_deinit(&static_kvdb);
+                    rt_kprintf("KVDB '%s' deinit success.\n", static_kvdb.parent.name);
+                }
+            }
+            else if (!rt_strcmp(operator, "bench"))
+            {
+                kvdb_cmd_bench(&static_kvdb);
+            }
+            else
+            {
+                rt_kprintf("Usage:\n");
+                for (i = 0; i < sizeof(help_info) / sizeof(char*); i++)
+                {
+                    rt_kprintf("%s\n", help_info[i]);
+                }
+                rt_kprintf("\n");
+                return;
+            }
+        }
     }
 }
-MSH_CMD_EXPORT_ALIAS(__setenv, setenv, Set an envrionment variable.);
-
-static void printenv(uint8_t argc, char **argv) {
-    fdb_kv_print(&_global_kvdb);
-}
-MSH_CMD_EXPORT(printenv, Print all envrionment variables.);
-
-static void getvalue(uint8_t argc, char **argv) {
-    char *value = NULL;
-    value = fdb_kv_get(&_global_kvdb, argv[1]);
-    if (value) {
-        rt_kprintf("The %s value is %s.\n", argv[1], value);
-    } else {
-        rt_kprintf("Can't find %s.\n", argv[1]);
-    }
-}
-MSH_CMD_EXPORT(getvalue, Get an envrionment variable by name.);
-
-static void resetenv(uint8_t argc, char **argv) {
-    fdb_kv_set_default(&_global_kvdb);
-}
-MSH_CMD_EXPORT(resetenv, Reset all envrionment variable to default.);
+MSH_CMD_EXPORT(kvdb, FlashDB KVDB command.);
 
 #endif /* defined(FDB_USING_KVDB) */
 
