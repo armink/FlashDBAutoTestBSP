@@ -102,7 +102,7 @@ size_t _fdb_set_status(uint8_t status_table[], size_t status_num, size_t status_
     if (status_index > 0) {
 #if (FDB_WRITE_GRAN == 1)
         byte_index = (status_index - 1) / 8;
-        status_table[byte_index] &= ~(0x80 >> ((status_index - 1) % 8));
+        status_table[byte_index] &= (0x00ff >> (status_index % 8));
 #else
         byte_index = (status_index - 1) * (FDB_WRITE_GRAN / 8);
         status_table[byte_index] = 0x00;
@@ -133,7 +133,7 @@ size_t _fdb_get_status(uint8_t status_table[], size_t status_num)
     return status_num_bak - i;
 }
 
-fdb_err_t _fdb_write_status(fdb_db_t db, uint32_t addr, uint8_t status_table[], size_t status_num, size_t status_index)
+fdb_err_t _fdb_write_status(fdb_db_t db, uint32_t addr, uint8_t status_table[], size_t status_num, size_t status_index, bool sync)
 {
     fdb_err_t result = FDB_NO_ERR;
     size_t byte_index;
@@ -149,11 +149,11 @@ fdb_err_t _fdb_write_status(fdb_db_t db, uint32_t addr, uint8_t status_table[], 
         return FDB_NO_ERR;
     }
 #if (FDB_WRITE_GRAN == 1)
-    result = _fdb_flash_write(db, addr + byte_index, (uint32_t *)&status_table[byte_index], 1);
+    result = _fdb_flash_write(db, addr + byte_index, (uint32_t *)&status_table[byte_index], 1, sync);
 #else /*  (FDB_WRITE_GRAN == 8) ||  (FDB_WRITE_GRAN == 32) ||  (FDB_WRITE_GRAN == 64) */
     /* write the status by write granularity
      * some flash (like stm32 onchip) NOT supported repeated write before erase */
-    result = _fdb_flash_write(db, addr + byte_index, (uint32_t *) &status_table[byte_index], FDB_WRITE_GRAN / 8);
+    result = _fdb_flash_write(db, addr + byte_index, (uint32_t *) &status_table[byte_index], FDB_WRITE_GRAN / 8, sync);
 #endif /* FDB_WRITE_GRAN == 1 */
 
     return result;
@@ -236,56 +236,10 @@ size_t fdb_blob_read(fdb_db_t db, fdb_blob_t blob)
 }
 
 #ifdef FDB_USING_FILE_MODE
-#define DB_PATH_MAX            256
-static void get_db_file_path(fdb_db_t db, uint32_t addr, char *path, size_t size)
-{
-#define DB_NAME_MAX            8
-
-    /* from db_name.fdb.0 to db_name.fdb.n */
-    char file_name[DB_NAME_MAX + 4 + 10];
-    uint32_t sec_addr = FDB_ALIGN_DOWN(addr, db->sec_size);
-    int index = sec_addr / db->sec_size;
-
-    snprintf(file_name, sizeof(file_name), "%.*s.fdb.%d", DB_NAME_MAX, db->name, index);
-    if (strlen(db->storage.dir) + 1 + strlen(file_name) >= size) {
-        /* path is too long */
-        FDB_ASSERT(0)
-    }
-    snprintf(path, size, "%s/%s", db->storage.dir, file_name);
-}
-
-
-static FILE *open_db_file(fdb_db_t db, uint32_t addr, bool clean)
-{
-    uint32_t sec_addr = FDB_ALIGN_DOWN(addr, db->sec_size);
-
-    if (sec_addr != db->cur_sec || db->cur_fp == NULL || clean) {
-        char path[DB_PATH_MAX];
-
-        get_db_file_path(db, addr, path, DB_PATH_MAX);
-
-        if (db->cur_fp) {
-            fclose(db->cur_fp);
-        }
-
-        if (clean) {
-            /* clean the old file */
-            db->cur_fp = fopen(path, "wb+");
-            fclose(db->cur_fp);
-        }
-
-        /* open the database file */
-        db->cur_fp = fopen(path, "rb+");
-        db->cur_sec = sec_addr;
-
-        if (db->cur_fp == NULL) {
-            FDB_INFO("Error: open (%s) file failed.\n", path);
-        }
-    }
-
-    return db->cur_fp;
-}
-#endif /* FDB_USING_FILE_MODE */
+extern fdb_err_t _fdb_file_read(fdb_db_t db, uint32_t addr, void *buf, size_t size);
+extern fdb_err_t _fdb_file_write(fdb_db_t db, uint32_t addr, const void *buf, size_t size, bool sync);
+extern fdb_err_t _fdb_file_erase(fdb_db_t db, uint32_t addr, size_t size);
+#endif /* FDB_USING_FILE_LIBC */
 
 fdb_err_t _fdb_flash_read(fdb_db_t db, uint32_t addr, void *buf, size_t size)
 {
@@ -293,14 +247,9 @@ fdb_err_t _fdb_flash_read(fdb_db_t db, uint32_t addr, void *buf, size_t size)
 
     if (db->file_mode) {
 #ifdef FDB_USING_FILE_MODE
-        FILE *fp = open_db_file(db, addr, false);
-        if (fp) {
-            addr = addr % db->sec_size;
-            fseek(fp, addr, SEEK_SET);
-            fread(buf, size, 1, fp);
-        } else {
-            result = FDB_READ_ERR;
-        }
+        return _fdb_file_read(db, addr, buf, size);
+#else
+        return FDB_READ_ERR;
 #endif
     } else {
 #ifdef FDB_USING_FAL_MODE
@@ -317,22 +266,9 @@ fdb_err_t _fdb_flash_erase(fdb_db_t db, uint32_t addr, size_t size)
 
     if (db->file_mode) {
 #ifdef FDB_USING_FILE_MODE
-        FILE *fp = open_db_file(db, addr, true);
-        if (fp != NULL) {
-#define BUF_SIZE 32
-            uint8_t buf[BUF_SIZE];
-            size_t i;
-            fseek(fp, 0, SEEK_SET);
-            for (i = 0; i * BUF_SIZE < size; i++)
-            {
-                memset(buf, 0xFF, BUF_SIZE);
-                fwrite(buf, BUF_SIZE, 1, fp);
-            }
-            memset(buf, 0xFF, BUF_SIZE);
-            fwrite(buf, size - i * BUF_SIZE, 1, fp);
-        } else {
-            result = FDB_ERASE_ERR;
-        }
+        return _fdb_file_erase(db, addr, size);
+#else
+        return FDB_ERASE_ERR;
 #endif /* FDB_USING_FILE_MODE */
     } else {
 #ifdef FDB_USING_FAL_MODE
@@ -345,21 +281,15 @@ fdb_err_t _fdb_flash_erase(fdb_db_t db, uint32_t addr, size_t size)
     return result;
 }
 
-fdb_err_t _fdb_flash_write(fdb_db_t db, uint32_t addr, const void *buf, size_t size)
+fdb_err_t _fdb_flash_write(fdb_db_t db, uint32_t addr, const void *buf, size_t size, bool sync)
 {
     fdb_err_t result = FDB_NO_ERR;
 
     if (db->file_mode) {
 #ifdef FDB_USING_FILE_MODE
-        FILE *fp = open_db_file(db, addr, false);
-        if (fp) {
-            addr = addr % db->sec_size;
-            fseek(fp, addr, SEEK_SET);
-            fwrite(buf, size, 1, fp);
-            fflush(fp);
-        } else {
-            result = FDB_READ_ERR;
-        }
+        return _fdb_file_write(db, addr, buf, size, sync);
+#else
+        return FDB_READ_ERR;
 #endif /* FDB_USING_FILE_MODE */
     } else {
 #ifdef FDB_USING_FAL_MODE

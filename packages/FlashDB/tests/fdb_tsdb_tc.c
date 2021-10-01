@@ -36,7 +36,9 @@ static fdb_time_t get_time(void)
 
 static void test_fdb_tsdb_init_ex(void)
 {
-    uassert_true(fdb_tsdb_init(&test_tsdb, "test_ts", TEST_TS_PART_NAME, get_time, 128, NULL) == FDB_NO_ERR);
+    extern struct fdb_tsdb _global_tsdb;
+    test_tsdb = _global_tsdb;
+//    uassert_true(fdb_tsdb_init(&test_tsdb, "test_ts", TEST_TS_PART_NAME, get_time, 128, NULL) == FDB_NO_ERR);
 }
 
 static void test_fdb_tsl_append(void)
@@ -92,7 +94,7 @@ static void test_fdb_tsl_query_count(void)
     uassert_true(fdb_tsl_query_count(&test_tsdb, from, to, FDB_TSL_WRITE) == TEST_TS_COUNT);
 }
 
-static bool est_fdb_tsl_set_status_cb(fdb_tsl_t tsl, void *arg)
+static bool test_fdb_tsl_set_status_cb(fdb_tsl_t tsl, void *arg)
 {
 	fdb_tsdb_t db = arg;
 
@@ -109,7 +111,7 @@ static void test_fdb_tsl_set_status(void)
 {
     fdb_time_t from = 0, to = TEST_TS_COUNT -1;
 
-    fdb_tsl_iter_by_time(&test_tsdb, from, to, est_fdb_tsl_set_status_cb, &test_tsdb);
+    fdb_tsl_iter_by_time(&test_tsdb, from, to, test_fdb_tsl_set_status_cb, &test_tsdb);
 
     uassert_true(fdb_tsl_query_count(&test_tsdb, from, to, FDB_TSL_USER_STATUS1) == TEST_TS_USER_STATUS1_COUNT);
     uassert_true(fdb_tsl_query_count(&test_tsdb, from, to, FDB_TSL_DELETED) == TEST_TS_DELETED_COUNT);

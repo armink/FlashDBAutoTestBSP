@@ -62,7 +62,6 @@
 
 #define KV_STATUS_TABLE_SIZE                     FDB_STATUS_TABLE_SIZE(FDB_KV_STATUS_NUM)
 
-//TODO 文件模式如何支持
 #define SECTOR_NUM                               (db_max_size(db) / db_sec_size(db))
 
 #define SECTOR_HDR_DATA_SIZE                     (FDB_WG_ALIGN(sizeof(struct sector_hdr_data)))
@@ -326,7 +325,7 @@ static fdb_err_t read_kv(fdb_kvdb_t db, fdb_kv_t kv)
         if (kv->status != FDB_KV_ERR_HDR) {
             kv->status = FDB_KV_ERR_HDR;
             FDB_DEBUG("Error: The KV @0x%08" PRIX32 " length has an error.\n", kv->addr.start);
-            _fdb_write_status((fdb_db_t)db, kv->addr.start, kv_hdr.status_table, FDB_KV_STATUS_NUM, FDB_KV_ERR_HDR);
+            _fdb_write_status((fdb_db_t)db, kv->addr.start, kv_hdr.status_table, FDB_KV_STATUS_NUM, FDB_KV_ERR_HDR, true);
         }
         kv->crc_is_ok = false;
         return FDB_READ_ERR;
@@ -361,6 +360,10 @@ static fdb_err_t read_kv(fdb_kvdb_t db, fdb_kv_t kv)
         kv->addr.value = kv_name_addr + FDB_WG_ALIGN(kv_hdr.name_len);
         kv->value_len = kv_hdr.value_len;
         kv->name_len = kv_hdr.name_len;
+        if (kv_hdr.name_len >= sizeof(kv->name) / sizeof(kv->name[0])) {
+            kv_hdr.name_len = sizeof(kv->name) / sizeof(kv->name[0]) - 1;
+        }
+        kv->name[kv_hdr.name_len] = '\0';
     }
 
     return result;
@@ -369,7 +372,7 @@ static fdb_err_t read_kv(fdb_kvdb_t db, fdb_kv_t kv)
 static fdb_err_t read_sector_info(fdb_kvdb_t db, uint32_t addr, kv_sec_info_t sector, bool traversal)
 {
     fdb_err_t result = FDB_NO_ERR;
-    struct sector_hdr_data sec_hdr;
+    struct sector_hdr_data sec_hdr = { 0 };
 
     FDB_ASSERT(addr % db_sec_size(db) == 0);
     FDB_ASSERT(sector);
@@ -684,7 +687,7 @@ char *fdb_kv_get(fdb_kvdb_t db, const char *key)
             return value;
         } else if (blob.saved.len > FDB_STR_KV_VALUE_MAX_SIZE) {
             FDB_INFO("Warning: The default string KV value buffer length (%d) is too less (%u).\n", FDB_STR_KV_VALUE_MAX_SIZE,
-                    blob.saved.len);
+                    (uint32_t)blob.saved.len);
         } else {
             FDB_INFO("Warning: The KV value isn't string. Could not be returned\n");
             return NULL;
@@ -698,12 +701,12 @@ static fdb_err_t write_kv_hdr(fdb_kvdb_t db, uint32_t addr, kv_hdr_data_t kv_hdr
 {
     fdb_err_t result = FDB_NO_ERR;
     /* write the status will by write granularity */
-    result = _fdb_write_status((fdb_db_t)db, addr, kv_hdr->status_table, FDB_KV_STATUS_NUM, FDB_KV_PRE_WRITE);
+    result = _fdb_write_status((fdb_db_t)db, addr, kv_hdr->status_table, FDB_KV_STATUS_NUM, FDB_KV_PRE_WRITE, false);
     if (result != FDB_NO_ERR) {
         return result;
     }
     /* write other header data */
-    result = _fdb_flash_write((fdb_db_t)db, addr + KV_MAGIC_OFFSET, &kv_hdr->magic, sizeof(struct kv_hdr_data) - KV_MAGIC_OFFSET);
+    result = _fdb_flash_write((fdb_db_t)db, addr + KV_MAGIC_OFFSET, &kv_hdr->magic, sizeof(struct kv_hdr_data) - KV_MAGIC_OFFSET, false);
 
     return result;
 }
@@ -711,7 +714,7 @@ static fdb_err_t write_kv_hdr(fdb_kvdb_t db, uint32_t addr, kv_hdr_data_t kv_hdr
 static fdb_err_t format_sector(fdb_kvdb_t db, uint32_t addr, uint32_t combined_value)
 {
     fdb_err_t result = FDB_NO_ERR;
-    struct sector_hdr_data sec_hdr;
+    struct sector_hdr_data sec_hdr = { 0 };
 
     FDB_ASSERT(addr % db_sec_size(db) == 0);
 
@@ -725,7 +728,7 @@ static fdb_err_t format_sector(fdb_kvdb_t db, uint32_t addr, uint32_t combined_v
         sec_hdr.combined = combined_value;
         sec_hdr.reserved = 0xFFFFFFFF;
         /* save the header */
-        result = _fdb_flash_write((fdb_db_t)db, addr, (uint32_t *)&sec_hdr, sizeof(struct sector_hdr_data));
+        result = _fdb_flash_write((fdb_db_t)db, addr, (uint32_t *)&sec_hdr, sizeof(struct sector_hdr_data), true);
 
 #ifdef FDB_KV_USING_CACHE
         /* delete the sector cache */
@@ -743,12 +746,12 @@ static fdb_err_t update_sec_status(fdb_kvdb_t db, kv_sec_info_t sector, size_t n
     /* change the current sector status */
     if (sector->status.store == FDB_SECTOR_STORE_EMPTY) {
         /* change the sector status to using */
-        result = _fdb_write_status((fdb_db_t)db, sector->addr, status_table, FDB_SECTOR_STORE_STATUS_NUM, FDB_SECTOR_STORE_USING);
+        result = _fdb_write_status((fdb_db_t)db, sector->addr, status_table, FDB_SECTOR_STORE_STATUS_NUM, FDB_SECTOR_STORE_USING, true);
     } else if (sector->status.store == FDB_SECTOR_STORE_USING) {
         /* check remain size */
         if (sector->remain < FDB_SEC_REMAIN_THRESHOLD || sector->remain - new_kv_len < FDB_SEC_REMAIN_THRESHOLD) {
             /* change the sector status to full */
-            result = _fdb_write_status((fdb_db_t)db, sector->addr, status_table, FDB_SECTOR_STORE_STATUS_NUM, FDB_SECTOR_STORE_FULL);
+            result = _fdb_write_status((fdb_db_t)db, sector->addr, status_table, FDB_SECTOR_STORE_STATUS_NUM, FDB_SECTOR_STORE_FULL, true);
 
 #ifdef FDB_KV_USING_CACHE
             /* delete the sector cache */
@@ -846,7 +849,6 @@ static fdb_err_t del_kv(fdb_kvdb_t db, const char *key, fdb_kv_t old_kv, bool co
 {
     fdb_err_t result = FDB_NO_ERR;
     uint32_t dirty_status_addr;
-    static bool last_is_complete_del = false;
 
 #if (KV_STATUS_TABLE_SIZE >= FDB_DIRTY_STATUS_TABLE_SIZE)
     uint8_t status_table[KV_STATUS_TABLE_SIZE];
@@ -867,12 +869,12 @@ static fdb_err_t del_kv(fdb_kvdb_t db, const char *key, fdb_kv_t old_kv, bool co
     }
     /* change and save the new status */
     if (!complete_del) {
-        result = _fdb_write_status((fdb_db_t)db, old_kv->addr.start, status_table, FDB_KV_STATUS_NUM, FDB_KV_PRE_DELETE);
-        last_is_complete_del = true;
+        result = _fdb_write_status((fdb_db_t)db, old_kv->addr.start, status_table, FDB_KV_STATUS_NUM, FDB_KV_PRE_DELETE, false);
+        db->last_is_complete_del = true;
     } else {
-        result = _fdb_write_status((fdb_db_t)db, old_kv->addr.start, status_table, FDB_KV_STATUS_NUM, FDB_KV_DELETED);
+        result = _fdb_write_status((fdb_db_t)db, old_kv->addr.start, status_table, FDB_KV_STATUS_NUM, FDB_KV_DELETED, true);
 
-        if (!last_is_complete_del && result == FDB_NO_ERR) {
+        if (!db->last_is_complete_del && result == FDB_NO_ERR) {
 #ifdef FDB_KV_USING_CACHE
             /* delete the KV in flash and cache */
             if (key != NULL) {
@@ -885,14 +887,14 @@ static fdb_err_t del_kv(fdb_kvdb_t db, const char *key, fdb_kv_t old_kv, bool co
 #endif /* FDB_KV_USING_CACHE */
         }
 
-        last_is_complete_del = false;
+        db->last_is_complete_del = false;
     }
 
     dirty_status_addr = FDB_ALIGN_DOWN(old_kv->addr.start, db_sec_size(db)) + SECTOR_DIRTY_OFFSET;
     /* read and change the sector dirty status */
     if (result == FDB_NO_ERR
             && _fdb_read_status((fdb_db_t)db, dirty_status_addr, status_table, FDB_SECTOR_DIRTY_STATUS_NUM) == FDB_SECTOR_DIRTY_FALSE) {
-        result = _fdb_write_status((fdb_db_t)db, dirty_status_addr, status_table, FDB_SECTOR_DIRTY_STATUS_NUM, FDB_SECTOR_DIRTY_TRUE);
+        result = _fdb_write_status((fdb_db_t)db, dirty_status_addr, status_table, FDB_SECTOR_DIRTY_STATUS_NUM, FDB_SECTOR_DIRTY_TRUE, true);
     }
 
     return result;
@@ -936,7 +938,7 @@ static fdb_err_t move_kv(fdb_kvdb_t db, fdb_kv_t kv)
         /* update the new KV sector status first */
         update_sec_status(db, &sector, kv->len, NULL);
 
-        _fdb_write_status((fdb_db_t)db, kv_addr, status_table, FDB_KV_STATUS_NUM, FDB_KV_PRE_WRITE);
+        _fdb_write_status((fdb_db_t)db, kv_addr, status_table, FDB_KV_STATUS_NUM, FDB_KV_PRE_WRITE, false);
         kv_len -= KV_MAGIC_OFFSET;
         for (len = 0, size = 0; len < kv_len; len += size) {
             if (len + sizeof(buf) < kv_len) {
@@ -945,9 +947,9 @@ static fdb_err_t move_kv(fdb_kvdb_t db, fdb_kv_t kv)
                 size = kv_len - len;
             }
             _fdb_flash_read((fdb_db_t)db, kv->addr.start + KV_MAGIC_OFFSET + len, (uint32_t *) buf, FDB_WG_ALIGN(size));
-            result = _fdb_flash_write((fdb_db_t)db, kv_addr + KV_MAGIC_OFFSET + len, (uint32_t *) buf, size);
+            result = _fdb_flash_write((fdb_db_t)db, kv_addr + KV_MAGIC_OFFSET + len, (uint32_t *) buf, size, true);
         }
-        _fdb_write_status((fdb_db_t)db, kv_addr, status_table, FDB_KV_STATUS_NUM, FDB_KV_WRITE);
+        _fdb_write_status((fdb_db_t)db, kv_addr, status_table, FDB_KV_STATUS_NUM, FDB_KV_WRITE, true);
 
 #ifdef FDB_KV_USING_CACHE
         update_sector_cache(db, FDB_ALIGN_DOWN(kv_addr, db_sec_size(db)),
@@ -972,7 +974,7 @@ static uint32_t new_kv(fdb_kvdb_t db, kv_sec_info_t sector, size_t kv_size)
 __retry:
 
     if ((empty_kv = alloc_kv(db, sector, kv_size)) == FAILED_ADDR && db->gc_request && !already_gc) {
-        FDB_DEBUG("Warning: Alloc an KV (size %u) failed when new KV. Now will GC then retry.\n", kv_size);
+        FDB_DEBUG("Warning: Alloc an KV (size %u) failed when new KV. Now will GC then retry.\n", (uint32_t)kv_size);
         gc_collect(db);
         already_gc = true;
         goto __retry;
@@ -1008,7 +1010,7 @@ static bool do_gc(kv_sec_info_t sector, void *arg1, void *arg2)
     if (sector->check_ok && (sector->status.dirty == FDB_SECTOR_DIRTY_TRUE || sector->status.dirty == FDB_SECTOR_DIRTY_GC)) {
         uint8_t status_table[FDB_DIRTY_STATUS_TABLE_SIZE];
         /* change the sector status to GC */
-        _fdb_write_status((fdb_db_t)db, sector->addr + SECTOR_DIRTY_OFFSET, status_table, FDB_SECTOR_DIRTY_STATUS_NUM, FDB_SECTOR_DIRTY_GC);
+        _fdb_write_status((fdb_db_t)db, sector->addr + SECTOR_DIRTY_OFFSET, status_table, FDB_SECTOR_DIRTY_STATUS_NUM, FDB_SECTOR_DIRTY_GC, true);
         /* search all KV */
         kv.addr.start = sector->addr + SECTOR_HDR_DATA_SIZE;
         do {
@@ -1041,7 +1043,7 @@ static void gc_collect(fdb_kvdb_t db)
     sector_iterator(db, &sector, FDB_SECTOR_STORE_EMPTY, &empty_sec, NULL, gc_check_cb, false);
 
     /* do GC collect */
-    FDB_DEBUG("The remain empty sector is %u, GC threshold is %d.\n", empty_sec, FDB_GC_EMPTY_SEC_THRESHOLD);
+    FDB_DEBUG("The remain empty sector is %u, GC threshold is %d.\n", (uint32_t)empty_sec, FDB_GC_EMPTY_SEC_THRESHOLD);
     if (empty_sec <= FDB_GC_EMPTY_SEC_THRESHOLD) {
         sector_iterator(db, &sector, FDB_SECTOR_STORE_UNUSED, db, NULL, do_gc, false);
     }
@@ -1064,12 +1066,12 @@ static fdb_err_t align_write(fdb_kvdb_t db, uint32_t addr, const uint32_t *buf, 
 #endif
 
     memset(align_data, 0xFF, align_data_size);
-    result = _fdb_flash_write((fdb_db_t)db, addr, buf, FDB_WG_ALIGN_DOWN(size));
+    result = _fdb_flash_write((fdb_db_t)db, addr, buf, FDB_WG_ALIGN_DOWN(size), false);
 
     align_remain = size - FDB_WG_ALIGN_DOWN(size);
     if (result == FDB_NO_ERR && align_remain) {
         memcpy(align_data, (uint8_t *)buf + FDB_WG_ALIGN_DOWN(size), align_remain);
-        result = _fdb_flash_write((fdb_db_t)db, addr + FDB_WG_ALIGN_DOWN(size), (uint32_t *) align_data, align_data_size);
+        result = _fdb_flash_write((fdb_db_t)db, addr + FDB_WG_ALIGN_DOWN(size), (uint32_t *) align_data, align_data_size, false);
     }
 
     return result;
@@ -1141,7 +1143,7 @@ static fdb_err_t create_kv_blob(fdb_kvdb_t db, kv_sec_info_t sector, const char 
         }
         /* change the KV status to KV_WRITE */
         if (result == FDB_NO_ERR) {
-            result = _fdb_write_status((fdb_db_t)db, kv_addr, kv_hdr.status_table, FDB_KV_STATUS_NUM, FDB_KV_WRITE);
+            result = _fdb_write_status((fdb_db_t)db, kv_addr, kv_hdr.status_table, FDB_KV_STATUS_NUM, FDB_KV_WRITE, true);
         }
         /* trigger GC collect when current sector is full */
         if (result == FDB_NO_ERR && is_full) {
@@ -1186,29 +1188,27 @@ fdb_err_t fdb_kv_del(fdb_kvdb_t db, const char *key)
 static fdb_err_t set_kv(fdb_kvdb_t db, const char *key, const void *value_buf, size_t buf_len)
 {
     fdb_err_t result = FDB_NO_ERR;
-    static struct fdb_kv kv;
-    static struct kvdb_sec_info sector;
     bool kv_is_found = false;
 
     if (value_buf == NULL) {
         result = del_kv(db, key, NULL, true);
     } else {
         /* make sure the flash has enough space */
-        if (new_kv_ex(db, &sector, strlen(key), buf_len) == FAILED_ADDR) {
+        if (new_kv_ex(db, &db->cur_sector, strlen(key), buf_len) == FAILED_ADDR) {
             return FDB_SAVED_FULL;
         }
-        kv_is_found = find_kv(db, key, &kv);
+        kv_is_found = find_kv(db, key, &db->cur_kv);
         /* prepare to delete the old KV */
         if (kv_is_found) {
-            result = del_kv(db, key, &kv, false);
+            result = del_kv(db, key, &db->cur_kv, false);
         }
         /* create the new KV */
         if (result == FDB_NO_ERR) {
-            result = create_kv_blob(db, &sector, key, value_buf, buf_len);
+            result = create_kv_blob(db, &db->cur_sector, key, value_buf, buf_len);
         }
         /* delete the old KV */
         if (kv_is_found && result == FDB_NO_ERR) {
-            result = del_kv(db, key, &kv, true);
+            result = del_kv(db, key, &db->cur_kv, true);
         }
         /* process the GC after set KV */
         if (db->gc_request) {
@@ -1336,7 +1336,7 @@ __reload:
                     }
                     _fdb_flash_read((fdb_db_t)db, kv->addr.value + len, (uint32_t *) buf, FDB_WG_ALIGN(size));
                     if (print_value) {
-                        FDB_PRINT("%.*s", size, buf);
+                        FDB_PRINT("%.*s", (int)size, buf);
                     } else if (!fdb_is_str(buf, size)) {
                         value_is_str = false;
                         break;
@@ -1380,8 +1380,8 @@ void fdb_kv_print(fdb_kvdb_t db)
     kv_iterator(db, &kv, &using_size, db, print_kv_cb);
 
     FDB_PRINT("\nmode: next generation\n");
-    FDB_PRINT("size: %u/%u bytes.\n", using_size + (size_t)((SECTOR_NUM - FDB_GC_EMPTY_SEC_THRESHOLD) * SECTOR_HDR_DATA_SIZE),
-            (size_t)(db_max_size(db) - db_sec_size(db) * FDB_GC_EMPTY_SEC_THRESHOLD));
+    FDB_PRINT("size: %u/%u bytes.\n", (uint32_t)using_size + ((SECTOR_NUM - FDB_GC_EMPTY_SEC_THRESHOLD) * SECTOR_HDR_DATA_SIZE),
+            db_max_size(db) - db_sec_size(db) * FDB_GC_EMPTY_SEC_THRESHOLD);
 
     /* unlock the KV cache */
     db_unlock(db);
@@ -1398,13 +1398,11 @@ static void kv_auto_update(fdb_kvdb_t db)
     if (get_kv(db, VER_NUM_KV_NAME, &saved_ver_num, sizeof(size_t), NULL) > 0) {
         /* check version number */
         if (saved_ver_num != setting_ver_num) {
-            struct fdb_kv kv;
             size_t i, value_len;
-            struct kvdb_sec_info sector;
-            FDB_DEBUG("Update the KV from version %u to %u.\n", saved_ver_num, setting_ver_num);
+            FDB_DEBUG("Update the KV from version %u to %u.\n", (uint32_t)saved_ver_num, (uint32_t)setting_ver_num);
             for (i = 0; i < db->default_kvs.num; i++) {
                 /* add a new KV when it's not found */
-                if (!find_kv(db, db->default_kvs.kvs[i].key, &kv)) {
+                if (!find_kv(db, db->default_kvs.kvs[i].key, &db->cur_kv)) {
                     /* It seems to be a string when value length is 0.
                      * This mechanism is for compatibility with older versions (less then V4.0). */
                     if (db->default_kvs.kvs[i].value_len == 0) {
@@ -1412,8 +1410,8 @@ static void kv_auto_update(fdb_kvdb_t db)
                     } else {
                         value_len = db->default_kvs.kvs[i].value_len;
                     }
-                    sector.empty_kv = FAILED_ADDR;
-                    create_kv_blob(db, &sector, db->default_kvs.kvs[i].key, db->default_kvs.kvs[i].value, value_len);
+                    db->cur_sector.empty_kv = FAILED_ADDR;
+                    create_kv_blob(db, &db->cur_sector, db->default_kvs.kvs[i].key, db->default_kvs.kvs[i].value, value_len);
                 }
             }
         } else {
@@ -1432,9 +1430,13 @@ static bool check_sec_hdr_cb(kv_sec_info_t sector, void *arg1, void *arg2)
         size_t *failed_count = arg1;
         fdb_kvdb_t db = arg2;
 
-        FDB_DEBUG("Sector header info is incorrect. Auto format this sector (0x%08" PRIX32 ").\n", sector->addr);
         (*failed_count) ++;
-        format_sector(db, sector->addr, SECTOR_NOT_COMBINED);
+        if (db->parent.not_formatable) {
+            return true;
+        } else {
+            FDB_DEBUG("Sector header info is incorrect. Auto format this sector (0x%08" PRIX32 ").\n", sector->addr);
+            format_sector(db, sector->addr, SECTOR_NOT_COMBINED);
+        }
     }
 
     return false;
@@ -1472,8 +1474,11 @@ static bool check_and_recovery_kv_cb(fdb_kv_t kv, void *arg1, void *arg2)
         uint8_t status_table[KV_STATUS_TABLE_SIZE];
         /* the KV has not write finish, change the status to error */
         //TODO 绘制异常处理的状态装换图
-        _fdb_write_status((fdb_db_t)db, kv->addr.start, status_table, FDB_KV_STATUS_NUM, FDB_KV_ERR_HDR);
+        _fdb_write_status((fdb_db_t)db, kv->addr.start, status_table, FDB_KV_STATUS_NUM, FDB_KV_ERR_HDR, true);
         return true;
+    } else if (kv->crc_is_ok && kv->status == FDB_KV_WRITE) {
+        /* update the cache when first load */
+        update_kv_cache(db, kv->name, kv->name_len, kv->addr.start);
     }
 
     return false;
@@ -1494,6 +1499,10 @@ fdb_err_t _fdb_kv_load(fdb_kvdb_t db)
     db->in_recovery_check = true;
     /* check all sector header */
     sector_iterator(db, &sector, FDB_SECTOR_STORE_UNUSED, &check_failed_count, db, check_sec_hdr_cb, false);
+    if (db->parent.not_formatable && check_failed_count > 0) {
+        result = FDB_READ_ERR;
+        goto __exit;
+    }
     /* all sector header check failed */
     if (check_failed_count == SECTOR_NUM) {
         FDB_INFO("All sector header is incorrect. Set it to default.\n");
@@ -1515,6 +1524,7 @@ __retry:
 
     db->in_recovery_check = false;
 
+__exit:
     /* unlock the KV cache */
     db_unlock(db);
 
@@ -1551,7 +1561,7 @@ void fdb_kvdb_control(fdb_kvdb_t db, int cmd, void *arg)
 #ifdef FDB_USING_FILE_MODE
         /* this change MUST before database initialization */
         FDB_ASSERT(db->parent.init_ok == false);
-        db->parent.file_mode = (bool)arg;
+        db->parent.file_mode = *(bool *)arg;
 #else
         FDB_INFO("Error: set file mode Failed. Please defined the FDB_USING_FILE_MODE macro.");
 #endif
@@ -1560,8 +1570,13 @@ void fdb_kvdb_control(fdb_kvdb_t db, int cmd, void *arg)
 #ifdef FDB_USING_FILE_MODE
         /* this change MUST before database initialization */
         FDB_ASSERT(db->parent.init_ok == false);
-        db->parent.max_size = (uint32_t)arg;
+        db->parent.max_size = *(uint32_t *)arg;
 #endif
+        break;
+    case FDB_KVDB_CTRL_SET_NOT_FORMAT:
+        /* this change MUST before database initialization */
+        FDB_ASSERT(db->parent.init_ok == false);
+        db->parent.not_formatable = *(bool *)arg;
         break;
     }
 }
@@ -1586,7 +1601,6 @@ fdb_err_t fdb_kvdb_init(fdb_kvdb_t db, const char *name, const char *part_name, 
     size_t i;
 #endif
 
-    FDB_ASSERT(default_kv);
     /* must be aligned with write granularity */
     FDB_ASSERT((FDB_STR_KV_VALUE_MAX_SIZE * 8) % FDB_WRITE_GRAN == 0);
 
@@ -1597,7 +1611,13 @@ fdb_err_t fdb_kvdb_init(fdb_kvdb_t db, const char *name, const char *part_name, 
 
     db->gc_request = false;
     db->in_recovery_check = false;
-    db->default_kvs = *default_kv;
+    if (default_kv) {
+        db->default_kvs = *default_kv;
+    }
+    else {
+        db->default_kvs.num = 0;
+        db->default_kvs.kvs = NULL;
+    }
     /* there is at least one empty sector for GC. */
     FDB_ASSERT((FDB_GC_EMPTY_SEC_THRESHOLD > 0 && FDB_GC_EMPTY_SEC_THRESHOLD < SECTOR_NUM))
 
@@ -1610,8 +1630,7 @@ fdb_err_t fdb_kvdb_init(fdb_kvdb_t db, const char *name, const char *part_name, 
     }
 #endif /* FDB_KV_USING_CACHE */
 
-    //TODO 更新分区打印
-    FDB_DEBUG("KVDB in partition %s, size is %u bytes.\n", ((fdb_db_t)db)->storage.part->name, db_max_size(db));
+    FDB_DEBUG("KVDB size is %u bytes.\n", db_max_size(db));
 
     result = _fdb_kv_load(db);
 
@@ -1626,6 +1645,20 @@ __exit:
     _fdb_init_finish((fdb_db_t)db, result);
 
     return result;
+}
+
+/**
+ * The KV database initialization.
+ *
+ * @param db database object
+ *
+ * @return result
+ */
+fdb_err_t fdb_kvdb_deinit(fdb_kvdb_t db)
+{
+    _fdb_deinit((fdb_db_t) db);
+
+    return FDB_NO_ERR;
 }
 
 /**
@@ -1693,3 +1726,4 @@ bool fdb_kv_iterate(fdb_kvdb_t db, fdb_kv_iterator_t itr)
 }
 
 #endif /* defined(FDB_USING_KVDB) */
+
