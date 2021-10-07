@@ -276,10 +276,16 @@
 #define PKG_USING_FLASHDB
 #define FDB_USING_KVDB
 #define FDB_USING_TSDB
+#define FDB_USING_FAL_MODE
 #define FDB_WRITE_GRAN_1BIT
 #define FDB_WRITE_GRAN 1
+#define FDB_USING_FILE_POSIX_MODE
 #define FDB_DEBUG_ENABLE
 #define PKG_USING_FLASHDB_LATEST_VERSION
+#define PKG_FLASHDB_VER_NUM 0x99999
+
+/* Micrium: Micrium software products porting for RT-Thread */
+
 
 /* peripheral libraries and drivers */
 
@@ -288,6 +294,9 @@
 
 
 /* samples: kernel and components samples */
+
+
+/* games: games run on RT-Thread console */
 
 #define SOC_VEXPRESS_A9
 #define RT_USING_UART0

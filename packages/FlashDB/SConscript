@@ -10,7 +10,7 @@ if GetDepend(['FLASHDB_USING_SAMPLES']):
     src += Glob('samples/*.c')
 
 if GetDepend(['RT_USING_UTEST']):
-	src += Glob('tests/*.c')
+    src += Glob('tests/*.c')
 
 group = DefineGroup('FlashDB', src, depend = ['PKG_USING_FLASHDB'], CPPPATH = path)
 
