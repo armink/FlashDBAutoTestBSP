@@ -314,11 +314,16 @@ static void tsl(uint8_t argc, char **argv) {
     struct tm tm_to = { .tm_year = 2030 - 1900, .tm_mon = 0, .tm_mday = 1, .tm_hour = 0, .tm_min = 0, .tm_sec = 0 };
     time_t from_time = mktime(&tm_from), to_time = mktime(&tm_to);
     rt_tick_t start_tick = rt_tick_get(), end_tick;
+    fdb_err_t result;
 
     if ((argc > 2) && !strcmp(argv[1], "add")) {
-        fdb_tsl_append(&_global_tsdb, fdb_blob_make(&blob, argv[2], strlen(argv[2])));
+        result = fdb_tsl_append(&_global_tsdb, fdb_blob_make(&blob, argv[2], strlen(argv[2])));
+        if (result != FDB_NO_ERR) {
+            rt_kprintf("Append tsl has an error (%d)\n", result);
+        }
     } else if ((argc > 1) && !strcmp(argv[1], "get")) {
-        fdb_tsl_iter_by_time(&_global_tsdb, from_time, to_time, tsl_cb, NULL);
+//        fdb_tsl_iter_by_time(&_global_tsdb, from_time, to_time, tsl_cb, NULL);
+        fdb_tsl_iter_by_time(&_global_tsdb, 0, 2, tsl_cb, NULL);
 //        fdb_ts_iter_by_time(&_global_tsdb, atoi(argv[2]), atoi(argv[3]), ts_cb, NULL);
     } else if ((argc > 1) && !strcmp(argv[1], "clean")) {
         fdb_tsl_clean(&_global_tsdb);
@@ -341,7 +346,11 @@ static void tsl(uint8_t argc, char **argv) {
         start = _global_tsdb.get_time();
         while (rt_tick_get() - bench_start_tick <= (rt_tick_t)rt_tick_from_millisecond(BENCH_TIMEOUT)) {
             rt_snprintf(data, sizeof(data), "%d", append_num++);
-            fdb_tsl_append(&_global_tsdb, fdb_blob_make(&blob, data, rt_strnlen(data, sizeof(data))));
+            result = fdb_tsl_append(&_global_tsdb, fdb_blob_make(&blob, data, rt_strnlen(data, sizeof(data))));
+            if (result != FDB_NO_ERR) {
+                rt_kprintf("Append tsl has an error (%d)\n", result);
+                break;
+            }
         }
         end = _global_tsdb.get_time();
         temp = (float) append_num / (float)(BENCH_TIMEOUT / 1000);

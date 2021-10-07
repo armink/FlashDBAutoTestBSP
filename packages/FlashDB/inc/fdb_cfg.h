@@ -18,7 +18,6 @@
 extern void rt_kprintf(const char *fmt, ...);
 #define FDB_PRINT(...)             rt_kprintf(__VA_ARGS__)
 
-#define FDB_USING_FILE_MODE
 #define FDB_USING_FILE_POSIX_MODE
 #define FDB_USING_FAL_MODE
 
