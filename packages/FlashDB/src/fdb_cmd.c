@@ -14,12 +14,6 @@
 #include <flashdb.h>
 #include <rtthread.h>
 
-/* please defined the _global_kvdb and _global_tsdb then remove '#if 0' */
-#if 1
-
-extern struct fdb_kvdb _global_kvdb;
-extern struct fdb_tsdb _global_tsdb;
-
 #if defined(RT_USING_FINSH) && defined(FINSH_USING_MSH) && defined(FDB_USING_KVDB)
 #include <finsh.h>
 #if defined(FDB_USING_KVDB)
@@ -75,7 +69,8 @@ static void kvdb(uint8_t argc, char **argv)
 #define KVDB_CMD_RESET_INDEX            5
 #define KVDB_CMD_CLOSE_INDEX            6
 #define KVDB_CMD_BENCH_INDEX            7
-
+    
+    int result;
     size_t i = 0;
     fdb_err_t err = FDB_NO_ERR;
     static struct fdb_kvdb static_kvdb = { 0 };
@@ -106,6 +101,7 @@ static void kvdb(uint8_t argc, char **argv)
     else
     {
         const char *operator = argv[1];
+        uint32_t addr, size;
 
         if (!strcmp(operator, "probe"))
         {
@@ -125,8 +121,8 @@ static void kvdb(uint8_t argc, char **argv)
                 if (argc >= 6)
                 {
                     /* file path */
-                    uint32_t sec_size = atoi(argv[4]);
-                    uint32_t db_size = atoi(argv[5]);
+                    uint32_t sec_size = strtol(argv[4], NULL, 0);
+                    uint32_t db_size = strtol(argv[5], NULL, 0);
 
                     rt_strncpy(dev_name, argv[2], FDB_KV_NAME_MAX);
                     dev_name[FDB_KV_NAME_MAX-1] = '\0';
@@ -177,7 +173,7 @@ static void kvdb(uint8_t argc, char **argv)
                 }
                 else
                 {
-                    rt_kprintf("Probed a KVDB | %s | part_name: %s | sec_size: %d | max_size: %d |.\n", static_kvdb.parent.name,
+                    rt_kprintf("Probed a KVDB | %s | part_name: %s | sec_size: %d | max_size: %d |.\n", static_kvdb.parent.name, 
                         part_name, static_kvdb.parent.sec_size, static_kvdb.parent.max_size);
                 }
             }
@@ -279,6 +275,9 @@ MSH_CMD_EXPORT(kvdb, FlashDB KVDB command.);
 
 #endif /* defined(FDB_USING_KVDB) */
 
+#if 0
+/* please defined the _global_tsdb then remove '#if 0' */
+extern struct fdb_tsdb *_global_tsdb;
 
 #if defined(FDB_USING_TSDB)
 static bool tsl_cb(fdb_tsl_t tsl, void *arg)
@@ -289,7 +288,7 @@ static bool tsl_cb(fdb_tsl_t tsl, void *arg)
 
     if (log) {
         fdb_blob_make(&blob, log, tsl->log_len);
-        read_len = fdb_blob_read((fdb_db_t)&_global_tsdb, fdb_tsl_to_blob(tsl, &blob));
+        read_len = fdb_blob_read((fdb_db_t)_global_tsdb, fdb_tsl_to_blob(tsl, &blob));
 
         rt_kprintf("TSL time: %d\n", tsl->time);
         rt_kprintf("TSL blob content: %.*s\n", read_len, blob.buf);
@@ -314,23 +313,18 @@ static void tsl(uint8_t argc, char **argv) {
     struct tm tm_to = { .tm_year = 2030 - 1900, .tm_mon = 0, .tm_mday = 1, .tm_hour = 0, .tm_min = 0, .tm_sec = 0 };
     time_t from_time = mktime(&tm_from), to_time = mktime(&tm_to);
     rt_tick_t start_tick = rt_tick_get(), end_tick;
-    fdb_err_t result;
 
     if ((argc > 2) && !strcmp(argv[1], "add")) {
-        result = fdb_tsl_append(&_global_tsdb, fdb_blob_make(&blob, argv[2], strlen(argv[2])));
-        if (result != FDB_NO_ERR) {
-            rt_kprintf("Append tsl has an error (%d)\n", result);
-        }
+        fdb_tsl_append(_global_tsdb, fdb_blob_make(&blob, argv[2], strlen(argv[2])));
     } else if ((argc > 1) && !strcmp(argv[1], "get")) {
-//        fdb_tsl_iter_by_time(&_global_tsdb, from_time, to_time, tsl_cb, NULL);
-        fdb_tsl_iter_by_time(&_global_tsdb, 0, 2, tsl_cb, NULL);
-//        fdb_ts_iter_by_time(&_global_tsdb, atoi(argv[2]), atoi(argv[3]), ts_cb, NULL);
+        fdb_tsl_iter_by_time(_global_tsdb, from_time, to_time, tsl_cb, NULL);
+//        fdb_ts_iter_by_time(_global_tsdb, atoi(argv[2]), atoi(argv[3]), ts_cb, NULL);
     } else if ((argc > 1) && !strcmp(argv[1], "clean")) {
-        fdb_tsl_clean(&_global_tsdb);
+        fdb_tsl_clean(_global_tsdb);
     } else if ((argc > 2) && !strcmp(argv[1], "query")) {
         int status = atoi(argv[2]);
         size_t count;
-        count = fdb_tsl_query_count(&_global_tsdb, from_time, to_time, status);
+        count = fdb_tsl_query_count(_global_tsdb, from_time, to_time, status);
         rt_kprintf("query count: %d\n", count);
     } else if ((argc > 1) && !strcmp(argv[1], "bench")) {
 #define BENCH_TIMEOUT        (5*1000)
@@ -341,18 +335,14 @@ static void tsl(uint8_t argc, char **argv) {
         rt_tick_t bench_start_tick, spent_tick, min_tick = 9999, max_tick = 0, total_tick = 0;
         float temp;
 
-        fdb_tsl_clean(&_global_tsdb);
+        fdb_tsl_clean(_global_tsdb);
         bench_start_tick = rt_tick_get();
-        start = _global_tsdb.get_time();
+        start = _global_tsdb->get_time();
         while (rt_tick_get() - bench_start_tick <= (rt_tick_t)rt_tick_from_millisecond(BENCH_TIMEOUT)) {
             rt_snprintf(data, sizeof(data), "%d", append_num++);
-            result = fdb_tsl_append(&_global_tsdb, fdb_blob_make(&blob, data, rt_strnlen(data, sizeof(data))));
-            if (result != FDB_NO_ERR) {
-                rt_kprintf("Append tsl has an error (%d)\n", result);
-                break;
-            }
+            fdb_tsl_append(_global_tsdb, fdb_blob_make(&blob, data, rt_strnlen(data, sizeof(data))));
         }
-        end = _global_tsdb.get_time();
+        end = _global_tsdb->get_time();
         temp = (float) append_num / (float)(BENCH_TIMEOUT / 1000);
         snprintf(log, sizeof(log), "Append %d TSL in %d seconds, average: %.2f tsl/S, %.2f ms/per\n", append_num,
                 BENCH_TIMEOUT / 1000, temp, 1000.0f / temp);
@@ -360,7 +350,7 @@ static void tsl(uint8_t argc, char **argv) {
         cur = start;
         while(cur < end) {
             end_tick = bench_start_tick = rt_tick_get();
-            fdb_tsl_iter_by_time(&_global_tsdb, cur, cur, tsl_bench_cb, &end_tick);
+            fdb_tsl_iter_by_time(_global_tsdb, cur, cur, tsl_bench_cb, &end_tick);
 //            spent_tick = end_tick - bench_start_tick;
             spent_tick = rt_tick_get() - bench_start_tick;
             if (spent_tick < min_tick) {
@@ -375,7 +365,7 @@ static void tsl(uint8_t argc, char **argv) {
         snprintf(log, sizeof(log), "Query total spent %u (tick) for %ld TSL, min %u, max %u, average: %.2f tick/per\n", total_tick, end - start, min_tick, max_tick,
                 (float) total_tick / (float) (end - start));
         rt_kprintf("%s", log);
-        fdb_tsl_clean(&_global_tsdb);
+        fdb_tsl_clean(_global_tsdb);
     } else {
         rt_kprintf("Please input: tsl [add log content|get [from_s to_s]]\n");
     }
@@ -385,6 +375,6 @@ static void tsl(uint8_t argc, char **argv) {
 MSH_CMD_EXPORT_ALIAS(tsl, tsl, Time series log. tsl [add log content|get [from_s to_s]|clean].);
 #endif /* defined(FDB_USING_TSDB) */
 
-#endif /* defined(RT_USING_FINSH) && defined(FINSH_USING_MSH) */
-
 #endif /* if 0 */
+
+#endif /* defined(RT_USING_FINSH) && defined(FINSH_USING_MSH) */

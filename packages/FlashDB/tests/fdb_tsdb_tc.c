@@ -17,14 +17,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#if defined(RT_USING_UTEST) && defined(FDB_USING_TSDB)
+#if defined(RT_USING_UTEST) && defined(FDB_USING_TSDB) 
 
 #define TEST_TS_PART_NAME             "fdb_tsdb1"
 #define TEST_TS_COUNT                 256
 #define TEST_TS_USER_STATUS1_COUNT    (TEST_TS_COUNT/2)
 #define TEST_TS_DELETED_COUNT         (TEST_TS_COUNT - TEST_TS_USER_STATUS1_COUNT)
 
-static char log[10];
+static char logbuf[10];
 
 static struct fdb_tsdb test_tsdb;
 static int cur_times = 0;
@@ -36,9 +36,20 @@ static fdb_time_t get_time(void)
 
 static void test_fdb_tsdb_init_ex(void)
 {
-    extern struct fdb_tsdb _global_tsdb;
-    test_tsdb = _global_tsdb;
-//    uassert_true(fdb_tsdb_init(&test_tsdb, "test_ts", TEST_TS_PART_NAME, get_time, 128, NULL) == FDB_NO_ERR);
+    if (access("/fdb_tsdb1", 0) < 0)
+    {
+        mkdir("/fdb_tsdb1", 0);
+    }
+#ifndef FDB_USING_FAL_MODE
+    uint32_t sec_size = 4096, db_size = sec_size * 16;
+    rt_bool_t file_mode = true;
+    fdb_kvdb_control((fdb_kvdb_t)&(test_tsdb), FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
+    fdb_kvdb_control((fdb_kvdb_t)&(test_tsdb), FDB_TSDB_CTRL_SET_FILE_MODE, &file_mode);
+    fdb_kvdb_control((fdb_kvdb_t)&(test_tsdb), FDB_TSDB_CTRL_SET_MAX_SIZE, &db_size);
+#endif  
+   
+
+    uassert_true(fdb_tsdb_init(&test_tsdb, "test_ts", TEST_TS_PART_NAME, get_time, 128, NULL) == FDB_NO_ERR);
 }
 
 static void test_fdb_tsl_append(void)
@@ -47,15 +58,15 @@ static void test_fdb_tsl_append(void)
     int i;
 
     for (i = 0; i < TEST_TS_COUNT; ++i) {
-        rt_snprintf(log, sizeof(log), "%d", i);
-        uassert_true(fdb_tsl_append(&test_tsdb, fdb_blob_make(&blob, log, rt_strnlen(log, sizeof(log)))) == FDB_NO_ERR);
+        rt_snprintf(logbuf, sizeof(logbuf), "%d", i);
+        uassert_true(fdb_tsl_append(&test_tsdb, fdb_blob_make(&blob, logbuf, rt_strnlen(logbuf, sizeof(logbuf)))) == FDB_NO_ERR);
     }
 }
 
 static bool test_fdb_tsl_iter_cb(fdb_tsl_t tsl, void *arg)
 {
     struct fdb_blob blob;
-    char data[sizeof(log)];
+    char data[sizeof(logbuf)];
     size_t read_len;
 
     fdb_blob_make(&blob, data, tsl->log_len);
@@ -94,7 +105,7 @@ static void test_fdb_tsl_query_count(void)
     uassert_true(fdb_tsl_query_count(&test_tsdb, from, to, FDB_TSL_WRITE) == TEST_TS_COUNT);
 }
 
-static bool test_fdb_tsl_set_status_cb(fdb_tsl_t tsl, void *arg)
+static bool est_fdb_tsl_set_status_cb(fdb_tsl_t tsl, void *arg)
 {
 	fdb_tsdb_t db = arg;
 
@@ -111,7 +122,7 @@ static void test_fdb_tsl_set_status(void)
 {
     fdb_time_t from = 0, to = TEST_TS_COUNT -1;
 
-    fdb_tsl_iter_by_time(&test_tsdb, from, to, test_fdb_tsl_set_status_cb, &test_tsdb);
+    fdb_tsl_iter_by_time(&test_tsdb, from, to, est_fdb_tsl_set_status_cb, &test_tsdb);
 
     uassert_true(fdb_tsl_query_count(&test_tsdb, from, to, FDB_TSL_USER_STATUS1) == TEST_TS_USER_STATUS1_COUNT);
     uassert_true(fdb_tsl_query_count(&test_tsdb, from, to, FDB_TSL_DELETED) == TEST_TS_DELETED_COUNT);
@@ -161,6 +172,6 @@ static void testcase(void)
     UTEST_UNIT_RUN(test_fdb_tsl_set_status);
     UTEST_UNIT_RUN(test_fdb_tsl_clean);
 }
-UTEST_TC_EXPORT(testcase, "packages.tools.flashdb.tsdb", utest_tc_init, utest_tc_cleanup, 20);
 
-#endif /* defined(RT_USING_UTEST) && defined(FDB_USING_TSDB) */
+UTEST_TC_EXPORT(testcase, "packages.tools.flashdb.tsdb", utest_tc_init, utest_tc_cleanup, 20);
+#endif /* defined(RT_USING_UTEST) && defined(FDBTC_USING_TSDB) && defined(TC_USING_FDBTC_TSDB) */
