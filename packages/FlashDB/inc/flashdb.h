@@ -54,12 +54,13 @@ fdb_kv_t          fdb_kv_get_obj      (fdb_kvdb_t db, const char *key, fdb_kv_t 
 fdb_blob_t        fdb_kv_to_blob      (fdb_kv_t   kv, fdb_blob_t blob);
 fdb_err_t         fdb_kv_set_default  (fdb_kvdb_t db);
 void              fdb_kv_print        (fdb_kvdb_t db);
-fdb_kv_iterator_t fdb_kv_iterator_init(fdb_kv_iterator_t itr);
+fdb_kv_iterator_t fdb_kv_iterator_init(fdb_kvdb_t db, fdb_kv_iterator_t itr);
 bool              fdb_kv_iterate      (fdb_kvdb_t db, fdb_kv_iterator_t itr);
 
 /* Time series log API like a TSDB */
 fdb_err_t  fdb_tsl_append      (fdb_tsdb_t db, fdb_blob_t blob);
 void       fdb_tsl_iter        (fdb_tsdb_t db, fdb_tsl_cb cb, void *cb_arg);
+void       fdb_tsl_iter_reverse(fdb_tsdb_t db, fdb_tsl_cb cb, void *cb_arg);
 void       fdb_tsl_iter_by_time(fdb_tsdb_t db, fdb_time_t from, fdb_time_t to, fdb_tsl_cb cb, void *cb_arg);
 size_t     fdb_tsl_query_count (fdb_tsdb_t db, fdb_time_t from, fdb_time_t to, fdb_tsl_status_t status);
 fdb_err_t  fdb_tsl_set_status  (fdb_tsdb_t db, fdb_tsl_t tsl, fdb_tsl_status_t status);

@@ -17,8 +17,8 @@ extern "C" {
 #endif
 
 /* software version number */
-#define FDB_SW_VERSION                 "1.1.1"
-#define FDB_SW_VERSION_NUM             0x10101
+#define FDB_SW_VERSION                 "1.2.0"
+#define FDB_SW_VERSION_NUM             0x10200
 
 /* the KV max name length must less then it */
 #ifndef FDB_KV_NAME_MAX
@@ -65,7 +65,7 @@ extern "C" {
 #define FDB_ASSERT(EXPR)                                                      \
 if (!(EXPR))                                                                  \
 {                                                                             \
-    FDB_DEBUG("(%s) has assert failed at %s.\n", #EXPR, __FUNCTION__);        \
+    FDB_INFO("(%s) has assert failed at %s.\n", #EXPR, __func__);             \
     while (1);                                                                \
 }
 
@@ -164,6 +164,7 @@ struct fdb_kv_iterator {
     size_t iterated_obj_bytes;                   /**< Total storage size of KVs we have iterated. */
     size_t iterated_value_bytes;                 /**< Total value size of KVs we have iterated. */
     uint32_t sector_addr;                        /**< Current sector address we're iterating. DO NOT touch it. */
+    uint32_t traversed_len;                      /**< Traversed sector total length. */
 };
 typedef struct fdb_kv_iterator *fdb_kv_iterator_t;
 
@@ -264,6 +265,7 @@ struct fdb_db {
     } storage;
     uint32_t sec_size;                           /**< flash section size. It's a multiple of block size */
     uint32_t max_size;                           /**< database max size. It's a multiple of section size */
+    uint32_t oldest_addr;                        /**< the oldest sector start address */
     bool init_ok;                                /**< initialized successfully */
     bool file_mode;                              /**< is file mode, default is false */
     bool not_formatable;                         /**< is can NOT be formated mode, default is false */
@@ -313,7 +315,6 @@ struct fdb_tsdb {
     fdb_time_t last_time;                        /**< last TSL timestamp */
     fdb_get_time get_time;                       /**< the current timestamp get function */
     size_t max_len;                              /**< the maximum length of each log */
-    uint32_t oldest_addr;                        /**< the oldest sector start address */
     bool rollover;                               /**< the oldest data will rollover by newest data, default is true */
 
     void *user_data;

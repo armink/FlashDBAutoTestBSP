@@ -73,7 +73,7 @@
 #define FINSH_USING_SYMTAB
 #define FINSH_USING_DESCRIPTION
 #define FINSH_THREAD_PRIORITY 20
-#define FINSH_THREAD_STACK_SIZE 4096
+#define FINSH_THREAD_STACK_SIZE 8192
 #define FINSH_CMD_SIZE 80
 #define FINSH_USING_MSH
 #define FINSH_USING_MSH_DEFAULT
@@ -223,15 +223,19 @@
 #define ULOG_OUTPUT_LVL 7
 #define ULOG_USING_ISR_LOG
 #define ULOG_ASSERT_ENABLE
-#define ULOG_LINE_BUF_SIZE 128
+#define ULOG_LINE_BUF_SIZE 256
 
 /* log format */
 
+#define ULOG_OUTPUT_FLOAT
 #define ULOG_USING_COLOR
 #define ULOG_OUTPUT_TIME
+#define ULOG_TIME_USING_TIMESTAMP
 #define ULOG_OUTPUT_LEVEL
 #define ULOG_OUTPUT_TAG
+#define ULOG_OUTPUT_THREAD_NAME
 #define ULOG_BACKEND_USING_CONSOLE
+#define ULOG_USING_FILTER
 #define RT_USING_UTEST
 #define UTEST_THR_STACK_SIZE 4096
 #define UTEST_THR_PRIORITY 20
@@ -258,14 +262,35 @@
 
 /* language packages */
 
+/* JSON: JavaScript Object Notation, a lightweight data-interchange format */
+
+
+/* XML: Extensible Markup Language */
+
 
 /* multimedia packages */
+
+/* LVGL: powerful and easy-to-use embedded GUI library */
+
+
+/* u8g2: a monochrome graphic library */
 
 
 /* tools packages */
 
 
 /* system packages */
+
+/* enhanced kernel services */
+
+
+/* acceleration: Assembly language or algorithmic acceleration packages */
+
+
+/* CMSIS: ARM Cortex-M Microcontroller Software Interface Standard */
+
+
+/* Micrium: Micrium software products porting for RT-Thread */
 
 #define PKG_USING_FAL
 #define FAL_DEBUG_CONFIG
@@ -284,19 +309,31 @@
 #define PKG_USING_FLASHDB_LATEST_VERSION
 #define PKG_FLASHDB_VER_NUM 0x99999
 
-/* Micrium: Micrium software products porting for RT-Thread */
-
-
 /* peripheral libraries and drivers */
+
+/* sensors drivers */
+
+
+/* touch drivers */
+
+
+/* Kendryte SDK */
+
+
+/* AI packages */
+
+
+/* Signal Processing and Control Algorithm Packages */
 
 
 /* miscellaneous packages */
 
+/* project laboratory */
 
 /* samples: kernel and components samples */
 
 
-/* games: games run on RT-Thread console */
+/* entertainment: terminal games and other interesting software packages */
 
 #define SOC_VEXPRESS_A9
 #define RT_USING_UART0

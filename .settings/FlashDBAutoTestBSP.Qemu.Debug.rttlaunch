@@ -12,11 +12,11 @@
 <stringAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerBoardModel" value="vexpress-a9"/>
 <intAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerCpuQuantity" value="1"/>
 <booleanAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerEnableNetwork" value="false"/>
-<stringAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerExecutable" value="E:\Program\RTT\Env\tools\qemu\qemu32/qemu-system-arm.exe"/>
-<stringAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerExtraQemuCmd" value="-kernel Debug/rtthread.elf "/>
+<stringAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerExecutable" value="${debugger_install_path}/${qemu_debugger_relative_path}/qemu-system-arm.exe"/>
+<stringAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerExtraQemuCmd" value="  -kernel Debug/rtthread.elf "/>
 <stringAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerSdcardMemory" value="64.0"/>
 <stringAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerSerialPort" value="COM1"/>
-<stringAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerStartup" value="E:\Program\RTT\Env\tools\qemu\qemu32/qemu-system-arm.exe -M vexpress-a9 -sd sd.bin -nographic -S -s"/>
+<stringAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerStartup" value="${debugger_install_path}/${qemu_debugger_relative_path}/qemu-system-arm.exe -M vexpress-a9 -sd sd.bin -nographic -S -s"/>
 <stringAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerTapName" value=""/>
 <booleanAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerUseSdcard" value="true"/>
 <booleanAttribute key="ilg.gnumcueclipse.debug.gdbjtag.qemu.gdbServerUseSerial" value="false"/>
@@ -28,7 +28,7 @@
 <stringAttribute key="org.eclipse.cdt.debug.gdbjtag.core.ipAddress" value="localhost"/>
 <stringAttribute key="org.eclipse.cdt.debug.gdbjtag.core.jtagDevice" value="GNU MCU QEMU"/>
 <booleanAttribute key="org.eclipse.cdt.debug.gdbjtag.core.loadImage" value="true"/>
-<booleanAttribute key="org.eclipse.cdt.debug.gdbjtag.core.loadSymbols" value="true"/>
+<booleanAttribute key="org.eclipse.cdt.debug.gdbjtag.core.loadSymbols" value="false"/>
 <stringAttribute key="org.eclipse.cdt.debug.gdbjtag.core.pcRegister" value=""/>
 <intAttribute key="org.eclipse.cdt.debug.gdbjtag.core.portNumber" value="1234"/>
 <booleanAttribute key="org.eclipse.cdt.debug.gdbjtag.core.setPcRegister" value="false"/>
