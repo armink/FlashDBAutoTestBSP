@@ -62,9 +62,9 @@ static void test_fdb_tsdb_init_ex(void)
     rt_bool_t file_mode = true;
 
     memset(&test_tsdb, 0, sizeof(struct fdb_tsdb));
-    fdb_kvdb_control((fdb_tsdb_t)&(test_tsdb), FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
-    fdb_kvdb_control((fdb_tsdb_t)&(test_tsdb), FDB_TSDB_CTRL_SET_FILE_MODE, &file_mode);
-    fdb_kvdb_control((fdb_tsdb_t)&(test_tsdb), FDB_TSDB_CTRL_SET_MAX_SIZE, &db_size);
+    fdb_tsdb_control((fdb_tsdb_t)&(test_tsdb), FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
+    fdb_tsdb_control((fdb_tsdb_t)&(test_tsdb), FDB_TSDB_CTRL_SET_FILE_MODE, &file_mode);
+    fdb_tsdb_control((fdb_tsdb_t)&(test_tsdb), FDB_TSDB_CTRL_SET_MAX_SIZE, &db_size);
 
     uassert_true(fdb_tsdb_init(&test_tsdb, "test_ts", TEST_TS_PART_NAME, get_time, 128, NULL) == FDB_NO_ERR);
 }
