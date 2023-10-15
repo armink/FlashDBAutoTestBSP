@@ -407,6 +407,55 @@ static void test_fdb_tsl_iter_by_time_1(void)
     test_fdb_tsl_sector_bound_test(2, 2);
 }
 
+static void test_fdb_github_issue_249(void)
+{
+    if (access("storage_tsdb", 0) < 0)
+    {
+        mkdir("storage_tsdb", 0);
+    }
+
+    uint32_t sec_size = 16 * 1024, db_size = 512 * 1024, test_data_size = 0;
+    rt_bool_t file_mode = true, flag_not_format = false;
+    struct fdb_blob blob;
+    uint8_t *data = NULL;
+
+    memset(&test_tsdb, 0, sizeof(struct fdb_tsdb));
+    fdb_tsdb_control((fdb_tsdb_t) & (test_tsdb), FDB_TSDB_CTRL_SET_SEC_SIZE, &sec_size);
+    fdb_tsdb_control((fdb_tsdb_t) & (test_tsdb), FDB_TSDB_CTRL_SET_FILE_MODE, &file_mode);
+    fdb_tsdb_control((fdb_tsdb_t) & (test_tsdb), FDB_TSDB_CTRL_SET_NOT_FORMAT, &flag_not_format);
+    fdb_tsdb_control((fdb_tsdb_t) & (test_tsdb), FDB_TSDB_CTRL_SET_MAX_SIZE, &db_size);
+
+    uassert_true(fdb_tsdb_init(&test_tsdb, "storage_tsdb", "storage_tsdb", get_time, 10*1024, NULL) == FDB_NO_ERR);
+    /* clean status */
+    fdb_tsl_clean(&test_tsdb);
+    cur_times = 0;
+
+    test_data_size = 7 * 1024;
+    data = rt_malloc(test_data_size);
+    uassert_true(data != NULL);
+    uassert_true(fdb_tsl_append(&test_tsdb, fdb_blob_make(&blob, data, test_data_size)) == FDB_NO_ERR);
+    rt_free(data);
+
+    test_data_size = 8 * 1024;
+    data = rt_malloc(test_data_size);
+    uassert_true(data != NULL);
+    uassert_true(fdb_tsl_append(&test_tsdb, fdb_blob_make(&blob, data, test_data_size)) == FDB_NO_ERR);
+    rt_free(data);
+
+    test_data_size = 9 * 1024;
+    data = rt_malloc(test_data_size);
+    uassert_true(data != NULL);
+    uassert_true(fdb_tsl_append(&test_tsdb, fdb_blob_make(&blob, data, test_data_size)) == FDB_NO_ERR);
+    rt_free(data);
+
+    { /* reboot simulation */
+        uassert_true(fdb_tsdb_deinit(&test_tsdb) == FDB_NO_ERR);
+        uassert_true(fdb_tsdb_init(&test_tsdb, "storage_tsdb", "storage_tsdb", get_time, 10 * 1024, NULL) == FDB_NO_ERR);
+    }
+    uassert_true(fdb_tsl_query_count(&test_tsdb, 2, 6, FDB_TSL_WRITE) == 3);
+    uassert_true(fdb_tsl_query_count(&test_tsdb, 0, INT32_MAX, FDB_TSL_WRITE) == 3);
+}
+
 static void testcase(void)
 {
     UTEST_UNIT_RUN(test_fdb_tsdb_init_ex);
@@ -419,6 +468,8 @@ static void testcase(void)
     UTEST_UNIT_RUN(test_fdb_tsl_clean);
     UTEST_UNIT_RUN(test_fdb_tsl_iter_by_time_1);
     UTEST_UNIT_RUN(test_fdb_tsdb_deinit);
+
+    UTEST_UNIT_RUN(test_fdb_github_issue_249);
 }
 
 UTEST_TC_EXPORT(testcase, "packages.system.flashdb.tsdb", utest_tc_init, utest_tc_cleanup, 20);
