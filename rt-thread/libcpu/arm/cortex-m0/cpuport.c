@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2021, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -90,7 +90,9 @@ rt_uint8_t *rt_hw_stack_init(void       *tentry,
     return stk;
 }
 
+#if defined(RT_USING_FINSH) && defined(MSH_USING_BUILT_IN_COMMANDS)
 extern long list_thread(void);
+#endif
 extern rt_thread_t rt_current_thread;
 /**
  * fault exception handling
@@ -106,9 +108,9 @@ void rt_hw_hard_fault_exception(struct exception_stack_frame *contex)
     rt_kprintf("r01: 0x%08x\n", contex->r1);
     rt_kprintf("r00: 0x%08x\n", contex->r0);
 
-    rt_kprintf("hard fault on thread: %s\n", rt_current_thread->name);
+    rt_kprintf("hard fault on thread: %s\n", rt_current_thread->parent.name);
 
-#ifdef RT_USING_FINSH
+#if defined(RT_USING_FINSH) && defined(MSH_USING_BUILT_IN_COMMANDS)
     list_thread();
 #endif
 
@@ -129,7 +131,7 @@ void rt_hw_hard_fault_exception(struct exception_stack_frame *contex)
 /**
  * reset CPU
  */
-RT_WEAK void rt_hw_cpu_reset(void)
+void rt_hw_cpu_reset(void)
 {
     SCB_AIRCR  = SCB_RESET_VALUE;//((0x5FAUL << SCB_AIRCR_VECTKEY_Pos) |SCB_AIRCR_SYSRESETREQ_Msk);
 }

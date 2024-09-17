@@ -1,8 +1,24 @@
 from building import *
 
-cwd     = GetCurrentDir()
-src	= Glob('*.c')
+cwd = GetCurrentDir()
 CPPPATH = [cwd + '/../include']
-group = DefineGroup('DeviceDrivers', src, depend = ['RT_USING_SERIAL'], CPPPATH = CPPPATH)
+group = []
+src = []
+
+if not GetDepend(['RT_USING_SERIAL']):
+    Return('group')
+
+if GetDepend(['RT_USING_SMART']):
+    src += Glob('serial_tty.c')
+
+if GetDepend(['RT_USING_SERIAL_V2']):
+    src += ['serial_v2.c']
+else:
+    src += ['serial.c']
+
+if GetDepend(['RT_USING_DM']):
+    src += ['serial_dm.c']
+
+group = DefineGroup('DeviceDrivers', src, depend = [''], CPPPATH = CPPPATH)
 
 Return('group')

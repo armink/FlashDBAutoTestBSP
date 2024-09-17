@@ -27,6 +27,12 @@ import os
 import re
 import sys
 import shutil
+import hashlib
+import operator
+
+DEFAULT_RTT_PACKAGE_URL = 'https://github.com/RT-Thread/packages.git'
+# you can change the package url by defining RTT_PACKAGE_URL, ex:
+#    export RTT_PACKAGE_URL=https://github.com/Varanda-Labs/packages.git
 
 # make rtconfig.h from .config
 
@@ -37,7 +43,6 @@ def is_pkg_special_config(config_str):
         if config_str.startswith("PKG_") and (config_str.endswith('_PATH') or config_str.endswith('_VER')):
             return True
     return False
-
 
 def mk_rtconfig(filename):
     try:
@@ -97,6 +102,14 @@ def mk_rtconfig(filename):
     rtconfig.write('#endif\n')
     rtconfig.close()
 
+
+def get_file_md5(file):
+    MD5 = hashlib.new('md5')
+    with open(file, 'r') as fp:
+        MD5.update(fp.read().encode('utf8'))
+        fp_md5 = MD5.hexdigest()
+        return fp_md5
+
 def config():
     mk_rtconfig('.config')
 
@@ -138,6 +151,8 @@ def touch_env():
     else:
         home_dir = os.environ['USERPROFILE']
 
+    package_url = os.getenv('RTT_PACKAGE_URL') or DEFAULT_RTT_PACKAGE_URL
+
     env_dir  = os.path.join(home_dir, '.env')
     if not os.path.exists(env_dir):
         os.mkdir(env_dir)
@@ -149,7 +164,7 @@ def touch_env():
 
     if not os.path.exists(os.path.join(env_dir, 'packages', 'packages')):
         try:
-            ret = os.system('git clone https://github.com/RT-Thread/packages.git %s' % os.path.join(env_dir, 'packages', 'packages'))
+            ret = os.system('git clone %s %s' % (package_url, os.path.join(env_dir, 'packages', 'packages')))
             if ret != 0:
                 shutil.rmtree(os.path.join(env_dir, 'packages', 'packages'))
                 print("********************************************************************************\n"
@@ -204,67 +219,94 @@ def touch_env():
     if sys.platform != 'win32':
         env_sh = open(os.path.join(env_dir, 'env.sh'), 'w')
         env_sh.write('export PATH=~/.env/tools/scripts:$PATH')
+
+        # if fish config exists, generate env.fish
+        if os.path.exists(os.path.join(home_dir, '.config', 'fish', 'config.fish')):
+            env_fish = open(os.path.join(env_dir, 'env.fish'), 'w')
+            env_fish.write('set -gx PATH ~/.env/tools/scripts $PATH')
     else:
         if os.path.exists(os.path.join(env_dir, 'tools', 'scripts')):
             os.environ["PATH"] = os.path.join(env_dir, 'tools', 'scripts') + ';' + os.environ["PATH"]
 
+# Exclude utestcases
+def exclude_utestcases(RTT_ROOT):
+    if os.path.isfile(os.path.join(RTT_ROOT, 'examples/utest/testcases/Kconfig')):
+        return
+
+    if not os.path.isfile(os.path.join(RTT_ROOT, 'Kconfig')):
+        return
+
+    with open(os.path.join(RTT_ROOT, 'Kconfig'), 'r') as f:
+        data = f.readlines()
+    with open(os.path.join(RTT_ROOT, 'Kconfig'), 'w') as f:
+        for line in data:
+            if line.find('examples/utest/testcases/Kconfig') == -1:
+                f.write(line)
+
 # menuconfig for Linux
 def menuconfig(RTT_ROOT):
+
+    # Exclude utestcases
+    exclude_utestcases(RTT_ROOT)
+
     kconfig_dir = os.path.join(RTT_ROOT, 'tools', 'kconfig-frontends')
     os.system('scons -C ' + kconfig_dir)
 
     touch_env()
     env_dir = get_env_dir()
-
-    os.environ['PKGS_ROOT'] = os.path.join(env_dir, 'packages')
+    if isinstance(env_dir, str):
+        os.environ['PKGS_ROOT'] = os.path.join(env_dir, 'packages')
 
     fn = '.config'
-
-    if os.path.isfile(fn):
-        mtime = os.path.getmtime(fn)
-    else:
-        mtime = -1
+    fn_old = '.config.old'
 
     kconfig_cmd = os.path.join(RTT_ROOT, 'tools', 'kconfig-frontends', 'kconfig-mconf')
     os.system(kconfig_cmd + ' Kconfig')
 
     if os.path.isfile(fn):
-        mtime2 = os.path.getmtime(fn)
+        if os.path.isfile(fn_old):
+            diff_eq = operator.eq(get_file_md5(fn), get_file_md5(fn_old))
+        else:
+            diff_eq = False
     else:
-        mtime2 = -1
+        sys.exit(-1)
 
     # make rtconfig.h
-    if mtime != mtime2:
+    if diff_eq == False:
+        shutil.copyfile(fn, fn_old)
         mk_rtconfig(fn)
 
 # guiconfig for windows and linux
 def guiconfig(RTT_ROOT):
     import pyguiconfig
 
+    # Exclude utestcases
+    exclude_utestcases(RTT_ROOT)
+
     if sys.platform != 'win32':
         touch_env()
 
     env_dir = get_env_dir()
-
-    os.environ['PKGS_ROOT'] = os.path.join(env_dir, 'packages')
+    if isinstance(env_dir, str):
+        os.environ['PKGS_ROOT'] = os.path.join(env_dir, 'packages')
 
     fn = '.config'
+    fn_old = '.config.old'
 
-    if os.path.isfile(fn):
-        mtime = os.path.getmtime(fn)
-    else:
-        mtime = -1
-
-    sys.argv = ['guiconfig', 'Kconfig'];
+    sys.argv = ['guiconfig', 'Kconfig']
     pyguiconfig._main()
 
     if os.path.isfile(fn):
-        mtime2 = os.path.getmtime(fn)
+        if os.path.isfile(fn_old):
+            diff_eq = operator.eq(get_file_md5(fn), get_file_md5(fn_old))
+        else:
+            diff_eq = False
     else:
-        mtime2 = -1
+        sys.exit(-1)
 
     # make rtconfig.h
-    if mtime != mtime2:
+    if diff_eq == False:
+        shutil.copyfile(fn, fn_old)
         mk_rtconfig(fn)
 
 
@@ -272,12 +314,15 @@ def guiconfig(RTT_ROOT):
 def guiconfig_silent(RTT_ROOT):
     import defconfig
 
+    # Exclude utestcases
+    exclude_utestcases(RTT_ROOT)
+
     if sys.platform != 'win32':
         touch_env()
 
     env_dir = get_env_dir()
-
-    os.environ['PKGS_ROOT'] = os.path.join(env_dir, 'packages')
+    if isinstance(env_dir, str):
+        os.environ['PKGS_ROOT'] = os.path.join(env_dir, 'packages')
 
     fn = '.config'
 

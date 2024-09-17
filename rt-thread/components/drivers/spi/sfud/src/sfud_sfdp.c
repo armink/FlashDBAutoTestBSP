@@ -85,7 +85,7 @@ bool sfud_read_sfdp(sfud_flash *flash) {
     if (read_sfdp_header(flash) && read_basic_header(flash, &basic_header)) {
         return read_basic_table(flash, &basic_header);
     } else {
-        SFUD_INFO("Warning: Read SFDP parameter header information failed. The %s is not support JEDEC SFDP.", flash->name);
+        SFUD_INFO("Warning: Read SFDP parameter header information failed. The %s does not support JEDEC SFDP.", flash->name);
         return false;
     }
 }
@@ -125,7 +125,7 @@ static bool read_sfdp_header(sfud_flash *flash) {
     sfdp->minor_rev = header[4];
     sfdp->major_rev = header[5];
     if (sfdp->major_rev > SUPPORT_MAX_SFDP_MAJOR_REV) {
-        SFUD_INFO("Error: This reversion(V%d.%d) SFDP is not supported.", sfdp->major_rev, sfdp->minor_rev);
+        SFUD_INFO("Error: This reversion(V%d.%d) of SFDP is not supported.", sfdp->major_rev, sfdp->minor_rev);
         return false;
     }
     SFUD_DEBUG("Check SFDP header is OK. The reversion is V%d.%d, NPN is %d.", sfdp->major_rev, sfdp->minor_rev,
@@ -162,7 +162,7 @@ static bool read_basic_header(const sfud_flash *flash, sfdp_para_header *basic_h
     basic_header->ptp       = (long)header[4] | (long)header[5] << 8 | (long)header[6] << 16;
     /* check JEDEC basic flash parameter header */
     if (basic_header->major_rev > SUPPORT_MAX_SFDP_MAJOR_REV) {
-        SFUD_INFO("Error: This reversion(V%d.%d) JEDEC basic flash parameter header is not supported.",
+        SFUD_INFO("Error: This reversion(V%d.%d) of JEDEC basic flash parameter header is not supported.",
                 basic_header->major_rev, basic_header->minor_rev);
         return false;
     }
@@ -223,7 +223,7 @@ static bool read_basic_table(sfud_flash *flash, sfdp_para_header *basic_header) 
         return false;
     }
     /* get write granularity */
-    //TODO Ä¿Ç°Îª 1.0 ËùÌá¹©µÄ·½Ê½£¬ºóÆÚÖ§³Ö V1.5 ¼°ÒÔÉÏµÄ·½Ê½¶ÁÈ¡ page size
+    //TODO ç›®å‰ä¸º 1.0 æ‰€æä¾›çš„æ–¹å¼ï¼ŒåæœŸæ”¯æŒ V1.5 åŠä»¥ä¸Šçš„æ–¹å¼è¯»å– page size
     switch ((table[0] & (0x01 << 2)) >> 2) {
     case 0:
         sfdp->write_gran = 1;

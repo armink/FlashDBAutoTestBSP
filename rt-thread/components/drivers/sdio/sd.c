@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2023, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -45,9 +45,9 @@ static const rt_uint8_t tacc_value[] =
 rt_inline rt_uint32_t GET_BITS(rt_uint32_t *resp,
                                rt_uint32_t  start,
                                rt_uint32_t  size)
-{                               
+{
         const rt_int32_t __size = size;
-        const rt_uint32_t __mask = (__size < 32 ? 1 << __size : 0) - 1; 
+        const rt_uint32_t __mask = (__size < 32 ? 1 << __size : 0) - 1;
         const rt_int32_t __off = 3 - ((start) / 32);
         const rt_int32_t __shft = (start) & 31;
         rt_uint32_t __res;
@@ -93,30 +93,11 @@ static rt_int32_t mmcsd_parse_csd(struct rt_mmcsd_card *card)
         card->tacc_ns = (tacc_uint[csd->taac&0x07] * tacc_value[(csd->taac&0x78)>>3] + 9) / 10;
         card->max_data_rate = tran_unit[csd->tran_speed&0x07] * tran_value[(csd->tran_speed&0x78)>>3];
 
-    #if 0
-        val = GET_BITS(resp, 115, 4);
-        unit = GET_BITS(resp, 112, 3);
-        csd->tacc_ns     = (tacc_uint[unit] * tacc_value[val] + 9) / 10;
-        csd->tacc_clks   = GET_BITS(resp, 104, 8) * 100;
-
-        val = GET_BITS(resp, 99, 4);
-        unit = GET_BITS(resp, 96, 3);
-        csd->max_data_rate    = tran_unit[unit] * tran_value[val];
-        csd->ccc      = GET_BITS(resp, 84, 12);
-
-        unit = GET_BITS(resp, 47, 3);
-        val = GET_BITS(resp, 62, 12);
-        csd->device_size      = (1 + val) << (unit + 2);
-
-        csd->read_bl_len = GET_BITS(resp, 80, 4);
-        csd->write_bl_len = GET_BITS(resp, 22, 4);
-        csd->r2w_factor = GET_BITS(resp, 26, 3);
-    #endif
         break;
     case 1:
         card->flags |= CARD_FLAG_SDHC;
 
-        /*This field is fixed to 0Eh, which indicates 1 ms. 
+        /*This field is fixed to 0Eh, which indicates 1 ms.
           The host should not use TAAC, NSAC, and R2W_FACTOR
           to calculate timeout and should uses fixed timeout
           values for read and write operations*/
@@ -138,27 +119,11 @@ static rt_int32_t mmcsd_parse_csd(struct rt_mmcsd_card *card)
 
         card->card_blksize = 512;
         card->card_capacity = (csd->c_size + 1) * 512;  /* unit:KB */
+        card->card_sec_cnt = card->card_capacity * 2;
         card->tacc_clks = 0;
         card->tacc_ns = 0;
         card->max_data_rate = tran_unit[csd->tran_speed&0x07] * tran_value[(csd->tran_speed&0x78)>>3];
 
-    #if 0
-        csd->tacc_ns     = 0;
-        csd->tacc_clks   = 0;
-
-        val = GET_BITS(resp, 99, 4);
-        unit = GET_BITS(resp, 96, 3);
-        csd->max_data_rate    = tran_unit[unit] * tran_value[val];
-        csd->ccc      = GET_BITS(resp, 84, 12);
-
-        val = GET_BITS(resp, 48, 22);
-        csd->device_size     = (1 + val) << 10;
-
-        csd->read_bl_len = 9;
-        csd->write_bl_len = 9;
-        /* host should not use this factor and should use 250ms for write timeout */
-        csd->r2w_factor = 2;
-    #endif
         break;
     default:
         LOG_E("unrecognised CSD structure version %d!", csd->csd_structure);
@@ -193,13 +158,13 @@ static rt_int32_t mmcsd_switch(struct rt_mmcsd_card *card)
     rt_uint8_t *buf;
 
     buf = (rt_uint8_t*)rt_malloc(64);
-    if (!buf) 
+    if (!buf)
     {
         LOG_E("alloc memory failed!");
 
         return -RT_ENOMEM;
     }
-    
+
     if (card->card_type != CARD_TYPE_SD)
         goto err;
     if (card->scr.sd_version < SCR_SPEC_VER_1)
@@ -227,7 +192,7 @@ static rt_int32_t mmcsd_switch(struct rt_mmcsd_card *card)
 
     mmcsd_send_request(host, &req);
 
-    if (cmd.err || data.err) 
+    if (cmd.err || data.err)
     {
         goto err1;
     }
@@ -257,12 +222,12 @@ static rt_int32_t mmcsd_switch(struct rt_mmcsd_card *card)
 
     mmcsd_send_request(host, &req);
 
-    if (cmd.err || data.err) 
+    if (cmd.err || data.err)
     {
         goto err1;
     }
 
-    if ((buf[16] & 0xF) != 1) 
+    if ((buf[16] & 0xF) != 1)
     {
         LOG_I("switching card to high speed failed!");
         goto err;
@@ -291,12 +256,12 @@ static rt_err_t mmcsd_app_cmd(struct rt_mmcsd_host *host,
 
     cmd.cmd_code = APP_CMD;
 
-    if (card) 
+    if (card)
     {
         cmd.arg = card->rca << 16;
         cmd.flags = RESP_R1 | CMD_AC;
-    } 
-    else 
+    }
+    else
     {
         cmd.arg = 0;
         cmd.flags = RESP_R1 | CMD_BCR;
@@ -320,8 +285,7 @@ rt_err_t mmcsd_send_app_cmd(struct rt_mmcsd_host *host,
                             int                   retry)
 {
     struct rt_mmcsd_req req;
-
-    rt_uint32_t i; 
+    int i;
     rt_err_t err;
 
     err = -RT_ERROR;
@@ -330,15 +294,15 @@ rt_err_t mmcsd_send_app_cmd(struct rt_mmcsd_host *host,
      * We have to resend MMC_APP_CMD for each attempt so
      * we cannot use the retries field in mmc_command.
      */
-    for (i = 0;i <= retry;i++) 
+    for (i = 0; i <= retry; i++)
     {
         rt_memset(&req, 0, sizeof(struct rt_mmcsd_req));
 
         err = mmcsd_app_cmd(host, card);
-        if (err) 
+        if (err)
         {
             /* no point in retrying; no APP commands allowed */
-            if (controller_is_spi(host)) 
+            if (controller_is_spi(host))
             {
                 if (cmd->resp[0] & R1_SPI_ILLEGAL_COMMAND)
                     break;
@@ -360,7 +324,7 @@ rt_err_t mmcsd_send_app_cmd(struct rt_mmcsd_host *host,
             break;
 
         /* no point in retrying illegal APP commands */
-        if (controller_is_spi(host)) 
+        if (controller_is_spi(host))
         {
             if (cmd->resp[0] & R1_SPI_ILLEGAL_COMMAND)
                 break;
@@ -380,7 +344,7 @@ rt_err_t mmcsd_app_set_bus_width(struct rt_mmcsd_card *card, rt_int32_t width)
     cmd.cmd_code = SD_APP_SET_BUS_WIDTH;
     cmd.flags = RESP_R1 | CMD_AC;
 
-    switch (width) 
+    switch (width)
     {
     case MMCSD_BUS_WIDTH_1:
         cmd.arg = MMCSD_BUS_WIDTH_1;
@@ -416,7 +380,7 @@ rt_err_t mmcsd_send_app_op_cond(struct rt_mmcsd_host *host,
         cmd.arg = ocr;
     cmd.flags = RESP_SPI_R1 | RESP_R3 | CMD_BCR;
 
-    for (i = 100; i; i--) 
+    for (i = 1000; i; i--)
     {
         err = mmcsd_send_app_cmd(host, RT_NULL, &cmd, 3);
         if (err)
@@ -427,12 +391,12 @@ rt_err_t mmcsd_send_app_op_cond(struct rt_mmcsd_host *host,
             break;
 
         /* otherwise wait until reset completes */
-        if (controller_is_spi(host)) 
+        if (controller_is_spi(host))
         {
             if (!(cmd.resp[0] & R1_SPI_IDLE))
                 break;
-        } 
-        else 
+        }
+        else
         {
             if (cmd.resp[0] & CARD_BUSY)
                 break;
@@ -440,7 +404,7 @@ rt_err_t mmcsd_send_app_op_cond(struct rt_mmcsd_host *host,
 
         err = -RT_ETIMEOUT;
 
-        mmcsd_delay_ms(10); //delay 10ms
+        rt_thread_mdelay(10); //delay 10ms
     }
 
     if (rocr && !controller_is_spi(host))
@@ -570,21 +534,21 @@ static rt_int32_t mmcsd_sd_init_card(struct rt_mmcsd_host *host,
 
     err = mmcsd_send_app_op_cond(host, ocr, RT_NULL);
     if (err)
-        goto err;
+        goto err2;
 
     if (controller_is_spi(host))
         err = mmcsd_get_cid(host, resp);
     else
         err = mmcsd_all_get_cid(host, resp);
     if (err)
-        goto err;
+        goto err2;
 
     card = rt_malloc(sizeof(struct rt_mmcsd_card));
-    if (!card) 
+    if (!card)
     {
         LOG_E("malloc card failed!");
         err = -RT_ENOMEM;
-        goto err;
+        goto err2;
     }
     rt_memset(card, 0, sizeof(struct rt_mmcsd_card));
 
@@ -595,7 +559,7 @@ static rt_int32_t mmcsd_sd_init_card(struct rt_mmcsd_host *host,
     /*
      * For native busses:  get card RCA and quit open drain mode.
      */
-    if (!controller_is_spi(host)) 
+    if (!controller_is_spi(host))
     {
         err = mmcsd_get_card_addr(host, &card->rca);
         if (err)
@@ -612,7 +576,7 @@ static rt_int32_t mmcsd_sd_init_card(struct rt_mmcsd_host *host,
     if (err)
         goto err1;
 
-    if (!controller_is_spi(host)) 
+    if (!controller_is_spi(host))
     {
         err = mmcsd_select_card(card);
         if (err)
@@ -625,7 +589,7 @@ static rt_int32_t mmcsd_sd_init_card(struct rt_mmcsd_host *host,
 
     mmcsd_parse_scr(card);
 
-    if (controller_is_spi(host)) 
+    if (controller_is_spi(host))
     {
         err = mmcsd_spi_use_crc(host, 1);
         if (err)
@@ -642,12 +606,12 @@ static rt_int32_t mmcsd_sd_init_card(struct rt_mmcsd_host *host,
     /* set bus speed */
     max_data_rate = (unsigned int)-1;
 
-    if (card->flags & CARD_FLAG_HIGHSPEED) 
+    if (card->flags & CARD_FLAG_HIGHSPEED)
     {
         if (max_data_rate > card->hs_max_data_rate)
             max_data_rate = card->hs_max_data_rate;
-    } 
-    else if (max_data_rate > card->max_data_rate) 
+    }
+    else if (max_data_rate > card->max_data_rate)
     {
         max_data_rate = card->max_data_rate;
     }
@@ -656,7 +620,7 @@ static rt_int32_t mmcsd_sd_init_card(struct rt_mmcsd_host *host,
 
     /*switch bus width*/
     if ((host->flags & MMCSD_BUSWIDTH_4) &&
-        (card->scr.sd_bus_widths & SD_SCR_BUS_WIDTH_4)) 
+        (card->scr.sd_bus_widths & SD_SCR_BUS_WIDTH_4))
     {
         err = mmcsd_app_set_bus_width(card, MMCSD_BUS_WIDTH_4);
         if (err)
@@ -671,7 +635,7 @@ static rt_int32_t mmcsd_sd_init_card(struct rt_mmcsd_host *host,
 
 err1:
     rt_free(card);
-err:
+err2:
 
     return err;
 }
@@ -681,7 +645,7 @@ err:
  */
 rt_int32_t init_sd(struct rt_mmcsd_host *host, rt_uint32_t ocr)
 {
-    rt_int32_t err;
+    rt_int32_t err = -RT_EINVAL;
     rt_uint32_t  current_ocr;
     /*
      * We need to get OCR a different way for SPI.
@@ -692,7 +656,7 @@ rt_int32_t init_sd(struct rt_mmcsd_host *host, rt_uint32_t ocr)
 
         err = mmcsd_spi_read_ocr(host, 0, &ocr);
         if (err)
-            goto err;
+            goto _err;
     }
 
     if (ocr & VDD_165_195)
@@ -711,7 +675,7 @@ rt_int32_t init_sd(struct rt_mmcsd_host *host, rt_uint32_t ocr)
     if (!current_ocr)
     {
         err = -RT_ERROR;
-        goto err;
+        goto _err;
     }
 
     /*
@@ -719,7 +683,7 @@ rt_int32_t init_sd(struct rt_mmcsd_host *host, rt_uint32_t ocr)
      */
     err = mmcsd_sd_init_card(host, current_ocr);
     if (err)
-        goto err;
+        goto _err;
 
     mmcsd_host_unlock(host);
 
@@ -735,7 +699,7 @@ remove_card:
     rt_mmcsd_blk_remove(host->card);
     rt_free(host->card);
     host->card = RT_NULL;
-err:
+_err:
 
     LOG_D("init SD card failed!");
 

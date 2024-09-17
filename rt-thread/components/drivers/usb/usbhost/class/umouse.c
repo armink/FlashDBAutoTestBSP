@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2023, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -19,6 +19,11 @@
 #endif
 
 #if defined(RT_USBH_HID) && defined(RT_USBH_HID_MOUSE)
+
+#define DBG_TAG    "usbhost.umouse"
+#define DBG_LVL           DBG_INFO
+#include <rtdbg.h>
+
 static struct uprotocal mouse_protocal;
 
 #ifdef RT_USING_RTGUI
@@ -42,9 +47,9 @@ static rt_err_t rt_usbh_hid_mouse_callback(void* arg)
 #endif
     hid = (struct uhid*)arg;
 
-    RT_DEBUG_LOG(RT_DEBUG_USB, ("hid 0x%x 0x%x\n",
+    LOG_D("hid 0x%x 0x%x",
                                 *(rt_uint32_t*)hid->buffer,
-                                *(rt_uint32_t*)(&hid->buffer[4])));
+                                *(rt_uint32_t*)(&hid->buffer[4]));
 #ifdef RT_USING_RTGUI
     if(hid->buffer[1]!=0)
     {
@@ -126,17 +131,38 @@ static rt_err_t rt_usbh_hid_mouse_callback(void* arg)
     return RT_EOK;
 }
 
+static rt_thread_t mouse_thread;
+static void mouse_task(void* param)
+{
+    struct uhintf* intf = (struct uhintf*)param;
+    while (1)
+    {
+        if (rt_usb_hcd_pipe_xfer(intf->device->hcd, ((struct uhid*)intf->user_data)->pipe_in,
+            ((struct uhid*)intf->user_data)->buffer, ((struct uhid*)intf->user_data)->pipe_in->ep.wMaxPacketSize,
+            USB_TIMEOUT_BASIC) == 0)
+        {
+            break;
+        }
+
+        rt_usbh_hid_mouse_callback(intf->user_data);
+    }
+}
+
+
 static rt_err_t rt_usbh_hid_mouse_init(void* arg)
 {
-    struct uintf* intf = (struct uintf*)arg;
+    struct uhintf* intf = (struct uhintf*)arg;
 
     RT_ASSERT(intf != RT_NULL);
 
     rt_usbh_hid_set_protocal(intf, 0);
 
-    rt_usbh_hid_set_idle(intf, 10, 0);
+    rt_usbh_hid_set_idle(intf, 0, 0);
 
-    RT_DEBUG_LOG(RT_DEBUG_USB, ("start usb mouse\n"));
+    mouse_thread = rt_thread_create("mouse0", mouse_task, intf, 1024, 8, 100);
+    rt_thread_startup(mouse_thread);
+
+    LOG_D("start usb mouse");
 #ifdef RT_USING_RTGUI
     RTGUI_EVENT_MOUSE_BUTTON_INIT(&emouse);
     emouse.wid = RT_NULL;

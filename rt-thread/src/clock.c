@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2021, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -13,27 +13,43 @@
  * 2010-07-13     Bernard      fix rt_tick_from_millisecond issue found by kuronca
  * 2011-06-26     Bernard      add rt_tick_set function.
  * 2018-11-22     Jesven       add per cpu tick
+ * 2020-12-29     Meco Man     implement rt_tick_get_millisecond()
+ * 2021-06-01     Meco Man     add critical section projection for rt_tick_increase()
+ * 2023-09-15     xqyjlj       perf rt_hw_interrupt_disable/enable
+ * 2023-10-16     RiceChen     fix: only the main core detection rt_timer_check(), in SMP mode
  */
 
 #include <rthw.h>
 #include <rtthread.h>
+#include <rtatomic.h>
 
 #ifdef RT_USING_SMP
 #define rt_tick rt_cpu_index(0)->tick
 #else
-static rt_tick_t rt_tick = 0;
-#endif
+static volatile rt_atomic_t rt_tick = 0;
+#endif /* RT_USING_SMP */
+
+#if defined(RT_USING_HOOK) && defined(RT_HOOK_USING_FUNC_PTR)
+static void (*rt_tick_hook)(void);
 
 /**
- * This function will initialize system tick and set it to zero.
- * @ingroup SystemInit
- *
- * @deprecated since 1.1.0, this function does not need to be invoked
- * in the system initialization.
+ * @addtogroup Hook
  */
-void rt_system_tick_init(void)
+
+/**@{*/
+
+/**
+ * @brief This function will set a hook function, which will be invoked when tick increase
+ *
+ *
+ * @param hook the hook function
+ */
+void rt_tick_sethook(void (*hook)(void))
 {
+    rt_tick_hook = hook;
 }
+/**@}*/
+#endif /* RT_USING_HOOK */
 
 /**
  * @addtogroup Clock
@@ -42,72 +58,66 @@ void rt_system_tick_init(void)
 /**@{*/
 
 /**
- * This function will return current tick from operating system startup
+ * @brief    This function will return current tick from operating system startup.
  *
- * @return current tick
+ * @return   Return current tick.
  */
 rt_tick_t rt_tick_get(void)
 {
     /* return the global tick */
-    return rt_tick;
+    return (rt_tick_t)rt_atomic_load(&(rt_tick));
 }
 RTM_EXPORT(rt_tick_get);
 
 /**
- * This function will set current tick
+ * @brief    This function will set current tick.
+ *
+ * @param    tick is the value that you will set.
  */
 void rt_tick_set(rt_tick_t tick)
 {
-    rt_base_t level;
-
-    level = rt_hw_interrupt_disable();
-    rt_tick = tick;
-    rt_hw_interrupt_enable(level);
+    rt_atomic_store(&(rt_tick), tick);
 }
 
 /**
- * This function will notify kernel there is one tick passed. Normally,
- * this function is invoked by clock ISR.
+ * @brief    This function will notify kernel there is one tick passed.
+ *           Normally, this function is invoked by clock ISR.
  */
 void rt_tick_increase(void)
 {
-    struct rt_thread *thread;
+    RT_ASSERT(rt_interrupt_get_nest() > 0);
 
+    RT_OBJECT_HOOK_CALL(rt_tick_hook, ());
     /* increase the global tick */
 #ifdef RT_USING_SMP
-    rt_cpu_self()->tick ++;
+    /* get percpu and increase the tick */
+    rt_atomic_add(&(rt_cpu_self()->tick), 1);
 #else
-    ++ rt_tick;
-#endif
+    rt_atomic_add(&(rt_tick), 1);
+#endif /* RT_USING_SMP */
 
     /* check time slice */
-    thread = rt_thread_self();
-
-    -- thread->remaining_tick;
-    if (thread->remaining_tick == 0)
-    {
-        /* change to initialized tick */
-        thread->remaining_tick = thread->init_tick;
-
-        thread->stat |= RT_THREAD_STAT_YIELD;
-
-        /* yield */
-        rt_thread_yield();
-    }
+    rt_sched_tick_increase();
 
     /* check timer */
+#ifdef RT_USING_SMP
+    if (rt_hw_cpu_id() != 0)
+    {
+        return;
+    }
+#endif
     rt_timer_check();
 }
 
 /**
- * This function will calculate the tick from millisecond.
+ * @brief    This function will calculate the tick from millisecond.
  *
- * @param ms the specified millisecond
- *           - Negative Number wait forever
- *           - Zero not wait
- *           - Max 0x7fffffff
+ * @param    ms is the specified millisecond.
+ *              - Negative Number wait forever
+ *              - Zero not wait
+ *              - Max 0x7fffffff
  *
- * @return the calculated tick
+ * @return   Return the calculated tick.
  */
 rt_tick_t rt_tick_from_millisecond(rt_int32_t ms)
 {
@@ -122,11 +132,34 @@ rt_tick_t rt_tick_from_millisecond(rt_int32_t ms)
         tick = RT_TICK_PER_SECOND * (ms / 1000);
         tick += (RT_TICK_PER_SECOND * (ms % 1000) + 999) / 1000;
     }
-    
+
     /* return the calculated tick */
     return tick;
 }
 RTM_EXPORT(rt_tick_from_millisecond);
 
-/**@}*/
+/**
+ * @brief    This function will return the passed millisecond from boot.
+ *
+ * @note     if the value of RT_TICK_PER_SECOND is lower than 1000 or
+ *           is not an integral multiple of 1000, this function will not
+ *           provide the correct 1ms-based tick.
+ *
+ * @return   Return passed millisecond from boot.
+ */
+rt_weak rt_tick_t rt_tick_get_millisecond(void)
+{
+#if RT_TICK_PER_SECOND == 0 // make cppcheck happy
+#error "RT_TICK_PER_SECOND must be greater than zero"
+#endif
 
+#if 1000 % RT_TICK_PER_SECOND == 0u
+    return rt_tick_get() * (1000u / RT_TICK_PER_SECOND);
+#else
+    #warning "rt-thread cannot provide a correct 1ms-based tick any longer,\
+    please redefine this function in another file by using a high-precision hard-timer."
+    return 0;
+#endif /* 1000 % RT_TICK_PER_SECOND == 0u */
+}
+
+/**@}*/

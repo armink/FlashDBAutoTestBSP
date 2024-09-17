@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2023, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -25,9 +25,17 @@
 #define BAUD_RATE_115200                115200
 #define BAUD_RATE_230400                230400
 #define BAUD_RATE_460800                460800
+#define BAUD_RATE_500000                500000
+#define BAUD_RATE_576000                576000
 #define BAUD_RATE_921600                921600
+#define BAUD_RATE_1000000               1000000
+#define BAUD_RATE_1152000               1152000
+#define BAUD_RATE_1500000               1500000
 #define BAUD_RATE_2000000               2000000
+#define BAUD_RATE_2500000               2500000
 #define BAUD_RATE_3000000               3000000
+#define BAUD_RATE_3500000               3500000
+#define BAUD_RATE_4000000               4000000
 
 #define DATA_BITS_5                     5
 #define DATA_BITS_6                     6
@@ -77,6 +85,9 @@
 #define RT_SERIAL_TX_DATAQUEUE_SIZE     2048
 #define RT_SERIAL_TX_DATAQUEUE_LWM      30
 
+#define RT_SERIAL_FLOWCONTROL_CTSRTS     1
+#define RT_SERIAL_FLOWCONTROL_NONE       0
+
 /* Default config for serial_configure structure */
 #define RT_SERIAL_CONFIG_DEFAULT           \
 {                                          \
@@ -87,8 +98,17 @@
     BIT_ORDER_LSB,    /* LSB first sent */ \
     NRZ_NORMAL,       /* Normal mode */    \
     RT_SERIAL_RB_BUFSZ, /* Buffer size */  \
+    RT_SERIAL_FLOWCONTROL_NONE, /* Off flowcontrol */ \
     0                                      \
 }
+
+/**
+ * @brief Sets a hook function when RX indicate is called
+ *
+ * @param thread is the target thread that initializing
+ */
+typedef void (*rt_hw_serial_rxind_hookproto_t)(rt_device_t dev, rt_size_t size);
+RT_OBJECT_HOOKLIST_DECLARE(rt_hw_serial_rxind_hookproto_t, rt_hw_serial_rxind);
 
 struct serial_configure
 {
@@ -100,11 +120,12 @@ struct serial_configure
     rt_uint32_t bit_order               :1;
     rt_uint32_t invert                  :1;
     rt_uint32_t bufsz                   :16;
-    rt_uint32_t reserved                :6;
+    rt_uint32_t flowcontrol             :1;
+    rt_uint32_t reserved                :5;
 };
 
 /*
- * Serial FIFO mode 
+ * Serial FIFO mode
  */
 struct rt_serial_rx_fifo
 {
@@ -121,7 +142,7 @@ struct rt_serial_tx_fifo
     struct rt_completion completion;
 };
 
-/* 
+/*
  * Serial DMA mode
  */
 struct rt_serial_rx_dma
@@ -144,6 +165,10 @@ struct rt_serial_device
 
     void *serial_rx;
     void *serial_tx;
+
+    struct rt_spinlock spinlock;
+
+    struct rt_device_notify rx_notify;
 };
 typedef struct rt_serial_device rt_serial_t;
 
@@ -158,7 +183,7 @@ struct rt_uart_ops
     int (*putc)(struct rt_serial_device *serial, char c);
     int (*getc)(struct rt_serial_device *serial);
 
-    rt_size_t (*dma_transmit)(struct rt_serial_device *serial, rt_uint8_t *buf, rt_size_t size, int direction);
+    rt_ssize_t (*dma_transmit)(struct rt_serial_device *serial, rt_uint8_t *buf, rt_size_t size, int direction);
 };
 
 void rt_hw_serial_isr(struct rt_serial_device *serial, int event);
@@ -167,5 +192,7 @@ rt_err_t rt_hw_serial_register(struct rt_serial_device *serial,
                                const char              *name,
                                rt_uint32_t              flag,
                                void                    *data);
+
+rt_err_t rt_hw_serial_register_tty(struct rt_serial_device *serial);
 
 #endif

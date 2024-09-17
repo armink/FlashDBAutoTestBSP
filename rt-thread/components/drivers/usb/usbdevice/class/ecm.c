@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2023, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -24,6 +24,7 @@
 #define USB_ETH_MTU     1514
 #endif
 #define MAX_ADDR_LEN    6
+#define ECM_INTF_STR_INDEX 10
 
 struct rt_ecm_eth
 {
@@ -35,22 +36,22 @@ struct rt_ecm_eth
     rt_uint8_t              host_addr[MAX_ADDR_LEN];
     rt_uint8_t              dev_addr[MAX_ADDR_LEN];
 
-    ALIGN(4)
+    rt_align(4)
     rt_uint8_t              rx_pool[512];
-    ALIGN(4)
+    rt_align(4)
     rt_size_t               rx_size;
-    ALIGN(4)
+    rt_align(4)
     rt_size_t               rx_offset;
-    ALIGN(4)
+    rt_align(4)
     char                    rx_buffer[USB_ETH_MTU];
     char                    tx_buffer[USB_ETH_MTU];
-    
+
     struct rt_semaphore     tx_buffer_free;
-    
+
 };
 typedef struct rt_ecm_eth * rt_ecm_eth_t;
 
-ALIGN(4)
+rt_align(4)
 static struct udevice_descriptor _dev_desc =
 {
     USB_DESC_LENGTH_DEVICE,     /* bLength */
@@ -70,7 +71,7 @@ static struct udevice_descriptor _dev_desc =
 };
 
 /* communcation interface descriptor */
-ALIGN(4)
+rt_align(4)
 const static struct ucdc_eth_descriptor _comm_desc =
 {
 #ifdef RT_USB_DEVICE_COMPOSITE
@@ -96,7 +97,11 @@ const static struct ucdc_eth_descriptor _comm_desc =
         USB_CDC_CLASS_COMM,
         USB_CDC_SUBCLASS_ETH,
         USB_CDC_PROTOCOL_NONE,
+#ifdef RT_USB_DEVICE_COMPOSITE
+        ECM_INTF_STR_INDEX,
+#else
         0x00,
+#endif
     },
     /* Header Functional Descriptor */
     {
@@ -136,7 +141,7 @@ const static struct ucdc_eth_descriptor _comm_desc =
 };
 
 /* data interface descriptor */
-ALIGN(4)
+rt_align(4)
 const static struct ucdc_data_descriptor _data_desc =
 {
     /* interface descriptor */
@@ -171,7 +176,7 @@ const static struct ucdc_data_descriptor _data_desc =
     },
 };
 
-ALIGN(4)
+rt_align(4)
 const static char* _ustring[] =
 {
     "Language",                 /* LANGID */
@@ -182,7 +187,7 @@ const static char* _ustring[] =
     "Interface",                /* INTERFACE */
 };
 
-ALIGN(4)
+rt_align(4)
 //FS and HS needed
 static struct usb_qualifier_descriptor dev_qualifier =
 {
@@ -207,7 +212,7 @@ static rt_err_t _cdc_send_notifi(ufunction_t func,ucdc_notification_code_t notif
     _notifi.bNotificatinCode = notifi;
     _notifi.wValue = wValue;
     _notifi.wLength = wLength;
-    
+
     eps->ep_cmd->request.buffer = (void *)&_notifi;
     eps->ep_cmd->request.size = 8;
     eps->ep_cmd->request.req_type = UIO_REQUEST_WRITE;
@@ -220,7 +225,7 @@ static rt_err_t _ecm_set_eth_packet_filter(ufunction_t func, ureq_t setup)
 {
     rt_ecm_eth_t _ecm_eth = (rt_ecm_eth_t)func->user_data;
     dcd_ep0_send_status(func->device->dcd);
-    
+
     /* send link up. */
     eth_device_linkchange(&_ecm_eth->parent, RT_TRUE);
     _cdc_send_notifi(func, UCDC_NOTIFI_NETWORK_CONNECTION, 1, 0);
@@ -292,7 +297,7 @@ static rt_err_t _ep_out_handler(ufunction_t func, rt_size_t size)
         ecm_device->rx_size = ecm_device->rx_offset;
         ecm_device->rx_offset = 0;
         eth_device_ready(&ecm_device->parent);
-        
+
     }else
     {
         ecm_device->eps.ep_out->request.buffer = ecm_device->eps.ep_out->buffer;
@@ -319,13 +324,13 @@ static rt_err_t rt_ecm_eth_close(rt_device_t dev)
     return RT_EOK;
 }
 
-static rt_size_t rt_ecm_eth_read(rt_device_t dev, rt_off_t pos, void* buffer, rt_size_t size)
+static rt_ssize_t rt_ecm_eth_read(rt_device_t dev, rt_off_t pos, void* buffer, rt_size_t size)
 {
     rt_set_errno(-RT_ENOSYS);
     return 0;
 }
 
-static rt_size_t rt_ecm_eth_write (rt_device_t dev, rt_off_t pos, const void* buffer, rt_size_t size)
+static rt_ssize_t rt_ecm_eth_write (rt_device_t dev, rt_off_t pos, const void* buffer, rt_size_t size)
 {
     rt_set_errno(-RT_ENOSYS);
     return 0;
@@ -427,7 +432,7 @@ rt_err_t rt_ecm_eth_tx(rt_device_t dev, struct pbuf* p)
         rt_sem_release(&ecm_eth_dev->tx_buffer_free);
         return result;
     }
-    
+
     pbuffer = (char *)&ecm_eth_dev->tx_buffer;
     for (q = p; q != NULL; q = q->next)
     {
@@ -480,7 +485,7 @@ static rt_err_t _function_enable(ufunction_t func)
     /* reset eth rx tx */
     ecm_device->rx_size = 0;
     ecm_device->rx_offset = 0;
-    
+
     eps->ep_out->request.buffer = (void *)eps->ep_out->buffer;
     eps->ep_out->request.size = EP_MAXPACKET(eps->ep_out);
     eps->ep_out->request.req_type = UIO_REQUEST_READ_BEST;
@@ -555,17 +560,21 @@ ufunction_t rt_usbd_function_ecm_create(udevice_t device)
     ualtsetting_t comm_setting, data_setting;
     ucdc_data_desc_t data_desc;
     ucdc_eth_desc_t comm_desc;
-    
+
     /* parameter check */
     RT_ASSERT(device != RT_NULL);
 
     /* set usb device string description */
+#ifdef RT_USB_DEVICE_COMPOSITE
+    rt_usbd_device_set_interface_string(device, ECM_INTF_STR_INDEX, _ustring[2]);
+#else
     rt_usbd_device_set_string(device, _ustring);
-
+#endif
     /* create a cdc class */
     cdc = rt_usbd_function_new(device, &_dev_desc, &ops);
     rt_usbd_device_set_qualifier(device, &dev_qualifier);
-    _ecm_eth= rt_malloc(sizeof(struct rt_ecm_eth)); 
+    _ecm_eth= rt_malloc(sizeof(struct rt_ecm_eth));
+    RT_ASSERT(_ecm_eth != RT_NULL);
     rt_memset(_ecm_eth, 0, sizeof(struct rt_ecm_eth));
     cdc->user_data = _ecm_eth;
 
@@ -599,7 +608,7 @@ ufunction_t rt_usbd_function_ecm_create(udevice_t device)
     rt_usbd_set_altsetting(intf_comm, 0);
     /* add the communication interface to the cdc class */
     rt_usbd_function_add_interface(cdc, intf_comm);
-    
+
     /* create a bulk in and a bulk out endpoint */
     data_desc = (ucdc_data_desc_t)data_setting->desc;
     eps->ep_out = rt_usbd_endpoint_new(&data_desc->ep_out_desc, _ep_out_handler);
@@ -635,26 +644,30 @@ ufunction_t rt_usbd_function_ecm_create(udevice_t device)
     _ecm_eth->host_addr[4] = 0xEC;//*(const rt_uint8_t *)(0x1fff7a14);
     _ecm_eth->host_addr[5] = 0xAB;//*(const rt_uint8_t *)(0x1fff7a18);
 
+#ifdef RT_USING_DEVICE_OPS
+    _ecm_eth->parent.parent.ops = &ecm_device_ops;
+#else
     _ecm_eth->parent.parent.init       = rt_ecm_eth_init;
     _ecm_eth->parent.parent.open       = rt_ecm_eth_open;
     _ecm_eth->parent.parent.close      = rt_ecm_eth_close;
     _ecm_eth->parent.parent.read       = rt_ecm_eth_read;
     _ecm_eth->parent.parent.write      = rt_ecm_eth_write;
     _ecm_eth->parent.parent.control    = rt_ecm_eth_control;
+#endif
     _ecm_eth->parent.parent.user_data  = device;
 
     _ecm_eth->parent.eth_rx     = rt_ecm_eth_rx;
     _ecm_eth->parent.eth_tx     = rt_ecm_eth_tx;
     /* register eth device */
     eth_device_init(&_ecm_eth->parent, "u0");
-    
+
     /* send link up. */
     eth_device_linkchange(&_ecm_eth->parent, RT_FALSE);
-   
+
     return cdc;
 }
 
-struct udclass ecm_class = 
+struct udclass ecm_class =
 {
     .rt_usbd_function_create = rt_usbd_function_ecm_create
 };

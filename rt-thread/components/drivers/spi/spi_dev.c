@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2023, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -11,7 +11,7 @@
 #include <drivers/spi.h>
 
 /* SPI bus device interface, compatible with RT-Thread 0.3.x/1.0.x */
-static rt_size_t _spi_bus_device_read(rt_device_t dev,
+static rt_ssize_t _spi_bus_device_read(rt_device_t dev,
                                       rt_off_t    pos,
                                       void       *buffer,
                                       rt_size_t   size)
@@ -25,7 +25,7 @@ static rt_size_t _spi_bus_device_read(rt_device_t dev,
     return rt_spi_transfer(bus->owner, RT_NULL, buffer, size);
 }
 
-static rt_size_t _spi_bus_device_write(rt_device_t dev,
+static rt_ssize_t _spi_bus_device_write(rt_device_t dev,
                                        rt_off_t    pos,
                                        const void *buffer,
                                        rt_size_t   size)
@@ -39,31 +39,15 @@ static rt_size_t _spi_bus_device_write(rt_device_t dev,
     return rt_spi_transfer(bus->owner, buffer, RT_NULL, size);
 }
 
-static rt_err_t _spi_bus_device_control(rt_device_t dev,
-                                        int         cmd,
-                                        void       *args)
-{
-    /* TODO: add control command handle */
-    switch (cmd)
-    {
-    case 0: /* set device */
-        break;
-    case 1: 
-        break;
-    }
-
-    return RT_EOK;
-}
-
 #ifdef RT_USING_DEVICE_OPS
-const static struct rt_device_ops spi_bus_ops = 
+const static struct rt_device_ops spi_bus_ops =
 {
     RT_NULL,
     RT_NULL,
     RT_NULL,
     _spi_bus_device_read,
     _spi_bus_device_write,
-    _spi_bus_device_control
+    RT_NULL
 };
 #endif
 
@@ -85,7 +69,7 @@ rt_err_t rt_spi_bus_device_init(struct rt_spi_bus *bus, const char *name)
     device->close   = RT_NULL;
     device->read    = _spi_bus_device_read;
     device->write   = _spi_bus_device_write;
-    device->control = _spi_bus_device_control;
+    device->control = RT_NULL;
 #endif
 
     /* register to device manager */
@@ -93,7 +77,7 @@ rt_err_t rt_spi_bus_device_init(struct rt_spi_bus *bus, const char *name)
 }
 
 /* SPI Dev device interface, compatible with RT-Thread 0.3.x/1.0.x */
-static rt_size_t _spidev_device_read(rt_device_t dev,
+static rt_ssize_t _spidev_device_read(rt_device_t dev,
                                      rt_off_t    pos,
                                      void       *buffer,
                                      rt_size_t   size)
@@ -107,7 +91,7 @@ static rt_size_t _spidev_device_read(rt_device_t dev,
     return rt_spi_transfer(device, RT_NULL, buffer, size);
 }
 
-static rt_size_t _spidev_device_write(rt_device_t dev,
+static rt_ssize_t _spidev_device_write(rt_device_t dev,
                                       rt_off_t    pos,
                                       const void *buffer,
                                       rt_size_t   size)
@@ -129,7 +113,7 @@ static rt_err_t _spidev_device_control(rt_device_t dev,
     {
     case 0: /* set device */
         break;
-    case 1: 
+    case 1:
         break;
     }
 
@@ -137,7 +121,7 @@ static rt_err_t _spidev_device_control(rt_device_t dev,
 }
 
 #ifdef RT_USING_DEVICE_OPS
-const static struct rt_device_ops spi_device_ops = 
+const static struct rt_device_ops spi_device_ops =
 {
     RT_NULL,
     RT_NULL,

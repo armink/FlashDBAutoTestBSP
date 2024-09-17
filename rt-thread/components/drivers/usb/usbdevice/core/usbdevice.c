@@ -1,9 +1,9 @@
 /*
  * File      : hid.c
- * COPYRIGHT (C) 2008 - 2018, RT-Thread Development Team
+ * COPYRIGHT (C) 2006 - 2021, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
- * 
+ *
  * Change Logs:
  * Date           Author       Notes
  * 2012-10-02     Yi Qiu       first version
@@ -62,7 +62,7 @@ static struct usb_qualifier_descriptor dev_qualifier =
 };
 #endif
 
-struct usb_os_comp_id_descriptor usb_comp_id_desc = 
+struct usb_os_comp_id_descriptor usb_comp_id_desc =
 {
     //head section
     {
@@ -87,7 +87,7 @@ rt_err_t rt_usbd_class_register(udclass_t udclass)
     if(!rt_list_isempty(&class_list))
     {
         rt_kprintf("[D/USBD] If you want to use usb composite device please define RT_USB_DEVICE_COMPOSITE\n");
-        return RT_ERROR;
+        return -RT_ERROR;
     }
 #endif
     rt_list_insert_before(&class_list,&udclass->list);
@@ -106,7 +106,7 @@ rt_err_t rt_usb_device_init(void)
     if(rt_list_isempty(&class_list))
     {
         rt_kprintf("[D/USBD] No class register on usb device\n");
-        return RT_ERROR;
+        return -RT_ERROR;
     }
     /* create and startup usb device thread */
     rt_usbd_core_init();

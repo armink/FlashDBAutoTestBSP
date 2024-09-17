@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2021, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -161,9 +161,9 @@ void rt_hw_cpu_reset()
  *  shutdown CPU
  *
  */
-void rt_hw_cpu_shutdown()
+void rt_hw_cpu_shutdown(void)
 {
-    rt_uint32_t level;
+    rt_base_t level;
     rt_kprintf("shutdown...\n");
 
     level = rt_hw_interrupt_disable();

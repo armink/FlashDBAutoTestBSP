@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2023, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -7,6 +7,7 @@
  * Date           Author        Notes
  * 2012-04-25     weety         first version
  * 2014-08-03     bernard       fix some compiling warning
+ * 2021-04-20     RiceChen      added support for bus clock control
  */
 
 #include <rtdevice.h>
@@ -19,7 +20,7 @@
 #endif
 #include <rtdbg.h>
 
-static rt_size_t i2c_bus_device_read(rt_device_t dev,
+static rt_ssize_t i2c_bus_device_read(rt_device_t dev,
                                      rt_off_t    pos,
                                      void       *buffer,
                                      rt_size_t   count)
@@ -39,7 +40,7 @@ static rt_size_t i2c_bus_device_read(rt_device_t dev,
     return rt_i2c_master_recv(bus, addr, flags, (rt_uint8_t *)buffer, count);
 }
 
-static rt_size_t i2c_bus_device_write(rt_device_t dev,
+static rt_ssize_t i2c_bus_device_write(rt_device_t dev,
                                       rt_off_t    pos,
                                       const void *buffer,
                                       rt_size_t   count)
@@ -75,9 +76,6 @@ static rt_err_t i2c_bus_device_control(rt_device_t dev,
     case RT_I2C_DEV_CTRL_10BIT:
         bus->flags |= RT_I2C_ADDR_10BIT;
         break;
-    case RT_I2C_DEV_CTRL_ADDR:
-        bus->addr = *(rt_uint16_t *)args;
-        break;
     case RT_I2C_DEV_CTRL_TIMEOUT:
         bus->timeout = *(rt_uint32_t *)args;
         break;
@@ -90,16 +88,16 @@ static rt_err_t i2c_bus_device_control(rt_device_t dev,
         }
         break;
     default:
-        break;
+        return rt_i2c_control(bus, cmd, args);
     }
 
     return RT_EOK;
 }
 
 #ifdef RT_USING_DEVICE_OPS
-const static struct rt_device_ops i2c_ops = 
+const static struct rt_device_ops i2c_ops =
 {
-    RT_NULL, 
+    RT_NULL,
     RT_NULL,
     RT_NULL,
     i2c_bus_device_read,

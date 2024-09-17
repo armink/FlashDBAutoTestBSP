@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2021, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -14,14 +14,10 @@
 
 #include "armv7.h"
 
-#ifdef RT_USING_VMM
-#include <vmm_context.h>
-#endif
-
 #include "gic.h"
 
 extern struct rt_thread *rt_current_thread;
-#ifdef RT_USING_FINSH
+#if defined(RT_USING_FINSH) && defined(MSH_USING_BUILT_IN_COMMANDS)
 extern long list_thread(void);
 #endif
 
@@ -53,7 +49,7 @@ void rt_hw_trap_undef(struct rt_hw_exp_stack *regs)
 {
     rt_kprintf("undefined instruction:\n");
     rt_hw_show_register(regs);
-#ifdef RT_USING_FINSH
+#if defined(RT_USING_FINSH) && defined(MSH_USING_BUILT_IN_COMMANDS)
     list_thread();
 #endif
     rt_hw_cpu_shutdown();
@@ -72,7 +68,7 @@ void rt_hw_trap_swi(struct rt_hw_exp_stack *regs)
 {
     rt_kprintf("software interrupt:\n");
     rt_hw_show_register(regs);
-#ifdef RT_USING_FINSH
+#if defined(RT_USING_FINSH) && defined(MSH_USING_BUILT_IN_COMMANDS)
     list_thread();
 #endif
     rt_hw_cpu_shutdown();
@@ -90,7 +86,7 @@ void rt_hw_trap_pabt(struct rt_hw_exp_stack *regs)
 {
     rt_kprintf("prefetch abort:\n");
     rt_hw_show_register(regs);
-#ifdef RT_USING_FINSH
+#if defined(RT_USING_FINSH) && defined(MSH_USING_BUILT_IN_COMMANDS)
     list_thread();
 #endif
     rt_hw_cpu_shutdown();
@@ -108,7 +104,7 @@ void rt_hw_trap_dabt(struct rt_hw_exp_stack *regs)
 {
     rt_kprintf("data abort:");
     rt_hw_show_register(regs);
-#ifdef RT_USING_FINSH
+#if defined(RT_USING_FINSH) && defined(MSH_USING_BUILT_IN_COMMANDS)
     list_thread();
 #endif
     rt_hw_cpu_shutdown();
@@ -125,13 +121,13 @@ void rt_hw_trap_resv(struct rt_hw_exp_stack *regs)
 {
     rt_kprintf("reserved trap:\n");
     rt_hw_show_register(regs);
-#ifdef RT_USING_FINSH
+#if defined(RT_USING_FINSH) && defined(MSH_USING_BUILT_IN_COMMANDS)
     list_thread();
 #endif
     rt_hw_cpu_shutdown();
 }
 
-#define GIC_ACK_INTID_MASK					0x000003ff
+#define GIC_ACK_INTID_MASK                  0x000003ff
 
 void rt_hw_trap_irq(void)
 {
@@ -162,15 +158,6 @@ void rt_hw_trap_irq(void)
         /* turn to interrupt service routine */
         isr_func(ir, param);
     }
-#ifdef RT_USING_VMM
-    else
-    {
-        /* We have to EOI before masking the interrupts */
-        arm_gic_ack(0, fullir);
-        vmm_virq_pending(ir);
-        return;
-    }
-#endif
 
     /* end of interrupt */
     arm_gic_ack(0, fullir);

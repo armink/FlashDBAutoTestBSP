@@ -19,7 +19,7 @@ TARGET = 'rtthread.' + rtconfig.TARGET_EXT
 DefaultEnvironment(tools=[])
 env = Environment(tools = ['mingw'],
     AS   = rtconfig.AS, ASFLAGS = rtconfig.AFLAGS,
-    CC   = rtconfig.CC, CCFLAGS = rtconfig.CFLAGS,
+    CC   = rtconfig.CC, CFLAGS = rtconfig.CFLAGS,
     CXX  = rtconfig.CXX, CXXFLAGS = rtconfig.CXXFLAGS,
     AR   = rtconfig.AR, ARFLAGS = '-rc',
     LINK = rtconfig.LINK, LINKFLAGS = rtconfig.LFLAGS)
@@ -31,6 +31,10 @@ Export('rtconfig')
 
 # prepare building environment
 objs = PrepareBuilding(env, RTT_ROOT)
+
+if GetDepend('RT_USING_SMART'):
+    # use smart link.lds
+    env['LINKFLAGS'] = env['LINKFLAGS'].replace('link.lds', 'link_smart.lds')
 
 # make a building
 DoBuilding(TARGET, objs)

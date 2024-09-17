@@ -1,11 +1,13 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2023, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
  * Change Logs:
  * Date           Author       Notes
  * 2012-11-23     Bernard      Add extern "C"
+ * 2020-06-13     armink       fix the 3 wires issue
+ * 2022-09-01     liYony       fix api rt_spi_sendrecv16 about MSB and LSB bug
  */
 
 #ifndef __SPI_H__
@@ -13,13 +15,12 @@
 
 #include <stdlib.h>
 #include <rtthread.h>
+#include <drivers/pin.h>
 
 #ifdef __cplusplus
 extern "C"{
 #endif
 
-#define RT_SPI_CPHA     (1<<0)                             /* bit[0]:CPHA, clock phase */
-#define RT_SPI_CPOL     (1<<1)                             /* bit[1]:CPOL, clock polarity */
 /**
  * At CPOL=0 the base value of the clock is zero
  *  - For CPHA=0, data are captured on the clock's rising edge (low->high transition)
@@ -32,26 +33,29 @@ extern "C"{
  *  - For CPHA=1, data are captured on clock's rising edge and data are propagated
  *    on a falling edge.
  */
+#define RT_SPI_CPHA     (1<<0)                             /* bit[0]:CPHA, clock phase */
+#define RT_SPI_CPOL     (1<<1)                             /* bit[1]:CPOL, clock polarity */
+
 #define RT_SPI_LSB      (0<<2)                             /* bit[2]: 0-LSB */
 #define RT_SPI_MSB      (1<<2)                             /* bit[2]: 1-MSB */
 
 #define RT_SPI_MASTER   (0<<3)                             /* SPI master device */
 #define RT_SPI_SLAVE    (1<<3)                             /* SPI slave device */
 
+#define RT_SPI_CS_HIGH  (1<<4)                             /* Chipselect active high */
+#define RT_SPI_NO_CS    (1<<5)                             /* No chipselect */
+#define RT_SPI_3WIRE    (1<<6)                             /* SI/SO pin shared */
+#define RT_SPI_READY    (1<<7)                             /* Slave pulls low to pause */
+
+#define RT_SPI_MODE_MASK    (RT_SPI_CPHA | RT_SPI_CPOL | RT_SPI_MSB | RT_SPI_SLAVE | RT_SPI_CS_HIGH | RT_SPI_NO_CS | RT_SPI_3WIRE | RT_SPI_READY)
+
 #define RT_SPI_MODE_0       (0 | 0)                        /* CPOL = 0, CPHA = 0 */
 #define RT_SPI_MODE_1       (0 | RT_SPI_CPHA)              /* CPOL = 0, CPHA = 1 */
 #define RT_SPI_MODE_2       (RT_SPI_CPOL | 0)              /* CPOL = 1, CPHA = 0 */
 #define RT_SPI_MODE_3       (RT_SPI_CPOL | RT_SPI_CPHA)    /* CPOL = 1, CPHA = 1 */
 
-#define RT_SPI_MODE_MASK    (RT_SPI_CPHA | RT_SPI_CPOL | RT_SPI_MSB)
-
-#define RT_SPI_BUS_MODE_SPI         (1<<0)       
-#define RT_SPI_BUS_MODE_QSPI        (1<<1)       
-
-#define RT_SPI_CS_HIGH  (1<<4)                             /* Chipselect active high */
-#define RT_SPI_NO_CS    (1<<5)                             /* No chipselect */
-#define RT_SPI_3WIRE    (1<<6)                             /* SI/SO pin shared */
-#define RT_SPI_READY    (1<<7)                             /* Slave pulls low to pause */
+#define RT_SPI_BUS_MODE_SPI         (1<<0)
+#define RT_SPI_BUS_MODE_QSPI        (1<<1)
 
 /**
  * SPI message structure
@@ -96,7 +100,7 @@ struct rt_spi_bus
 struct rt_spi_ops
 {
     rt_err_t (*configure)(struct rt_spi_device *device, struct rt_spi_configuration *configuration);
-    rt_uint32_t (*xfer)(struct rt_spi_device *device, struct rt_spi_message *message);
+    rt_ssize_t (*xfer)(struct rt_spi_device *device, struct rt_spi_message *message);
 };
 
 /**
@@ -108,6 +112,7 @@ struct rt_spi_device
     struct rt_spi_bus *bus;
 
     struct rt_spi_configuration config;
+    rt_base_t cs_pin;
     void   *user_data;
 };
 
@@ -149,7 +154,7 @@ struct rt_qspi_configuration
 };
 
 struct rt_qspi_device
-{ 
+{
     struct rt_spi_device parent;
 
     struct rt_qspi_configuration config;
@@ -171,6 +176,16 @@ rt_err_t rt_spi_bus_attach_device(struct rt_spi_device *device,
                                   const char           *name,
                                   const char           *bus_name,
                                   void                 *user_data);
+
+/* attach a device on SPI bus with CS pin */
+rt_err_t rt_spi_bus_attach_device_cspin(struct rt_spi_device *device,
+                                        const char           *name,
+                                        const char           *bus_name,
+                                        rt_base_t             cs_pin,
+                                        void                 *user_data);
+
+/* re-configure SPI bus */
+rt_err_t rt_spi_bus_configure(struct rt_spi_device *device);
 
 /**
  * This function takes SPI bus.
@@ -235,10 +250,18 @@ rt_err_t rt_spi_send_then_send(struct rt_spi_device *device,
  *
  * @return the actual length of transmitted.
  */
-rt_size_t rt_spi_transfer(struct rt_spi_device *device,
-                          const void           *send_buf,
-                          void                 *recv_buf,
-                          rt_size_t             length);
+rt_ssize_t rt_spi_transfer(struct rt_spi_device *device,
+                           const void           *send_buf,
+                           void                 *recv_buf,
+                           rt_size_t             length);
+
+rt_err_t rt_spi_sendrecv8(struct rt_spi_device *device,
+                          rt_uint8_t            senddata,
+                          rt_uint8_t           *recvdata);
+
+rt_err_t rt_spi_sendrecv16(struct rt_spi_device *device,
+                           rt_uint16_t           senddata,
+                           rt_uint16_t          *recvdata);
 
 /**
  * This function transfers a message list to the SPI device.
@@ -264,26 +287,6 @@ rt_inline rt_size_t rt_spi_send(struct rt_spi_device *device,
                                 rt_size_t             length)
 {
     return rt_spi_transfer(device, send_buf, RT_NULL, length);
-}
-
-rt_inline rt_uint8_t rt_spi_sendrecv8(struct rt_spi_device *device,
-                                      rt_uint8_t            data)
-{
-    rt_uint8_t value;
-
-    rt_spi_send_then_recv(device, &data, 1, &value, 1);
-
-    return value;
-}
-
-rt_inline rt_uint16_t rt_spi_sendrecv16(struct rt_spi_device *device,
-                                        rt_uint16_t           data)
-{
-    rt_uint16_t value;
-
-    rt_spi_send_then_recv(device, &data, 2, &value, 2);
-
-    return value;
 }
 
 /**

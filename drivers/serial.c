@@ -1,26 +1,7 @@
 /*
- *  serial.c UART driver
+ * Copyright (c) 2006-2021, RT-Thread Development Team
  *
- * COPYRIGHT (C) 2013, Shanghai Real-Thread Technology Co., Ltd
- *
- *  This file is part of RT-Thread (http://www.rt-thread.org)
- *  Maintainer: bernard.xiong <bernard.xiong at gmail.com>
- *
- *  All rights reserved.
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Change Logs:
  * Date           Author       Notes
@@ -31,6 +12,8 @@
 #include <rtdevice.h>
 
 #include "serial.h"
+#include "board.h"
+#include "mmu.h"
 
 struct hw_uart_device
 {
@@ -151,6 +134,9 @@ int rt_hw_uart_init(void)
     struct serial_configure config = RT_SERIAL_CONFIG_DEFAULT;
 
 #ifdef RT_USING_UART0
+#ifdef RT_USING_SMART
+    _uart0_device.hw_base = (uint32_t)rt_ioremap((void*)_uart0_device.hw_base, 0x1000);
+#endif
     uart = &_uart0_device;
 
     _serial0.ops    = &_uart_ops;
@@ -166,6 +152,9 @@ int rt_hw_uart_init(void)
 #endif
 
 #ifdef RT_USING_UART1
+#ifdef RT_USING_SMART
+    _uart1_device.hw_base = (uint32_t)rt_ioremap((void*)_uart1_device.hw_base, 0x1000);
+#endif
     uart = &_uart1_device;
     _serial1.ops = &_uart_ops;
     _serial1.config = config;

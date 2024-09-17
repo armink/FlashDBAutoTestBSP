@@ -1,19 +1,17 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2021, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
  * Change Logs:
  * Date           Author       Notes
  * 2018-04-14     chenyong     first version
+ * 2023-06-09     CX           optimize at_vprintfln interface
  */
 
 #include <at.h>
 #include <stdlib.h>
 #include <stdio.h>
-
-static char send_buf[AT_CMD_MAX_LEN];
-static rt_size_t last_cmd_len = 0;
 
 /**
  * dump hex format data to console device
@@ -36,7 +34,7 @@ void at_print_raw_cmd(const char *name, const char *buf, rt_size_t size)
         {
             if (i + j < size)
             {
-                rt_kprintf("%02X ", buf[i + j]);
+                rt_kprintf("%02X ", (unsigned char)buf[i + j]);
             }
             else
             {
@@ -59,30 +57,43 @@ void at_print_raw_cmd(const char *name, const char *buf, rt_size_t size)
     }
 }
 
-const char *at_get_last_cmd(rt_size_t *cmd_size)
+rt_weak rt_size_t at_utils_send(rt_device_t dev,
+                                rt_off_t    pos,
+                                const void *buffer,
+                                rt_size_t   size)
 {
-    *cmd_size = last_cmd_len;
-    return send_buf;
+    return rt_device_write(dev, pos, buffer, size);
 }
 
-rt_size_t at_vprintf(rt_device_t device, const char *format, va_list args)
+rt_size_t at_vprintf(rt_device_t device, char *send_buf, rt_size_t buf_size, const char *format, va_list args)
 {
-    last_cmd_len = vsnprintf(send_buf, sizeof(send_buf), format, args);
+    rt_size_t len = vsnprintf(send_buf, buf_size, format, args);
+    if (len == 0)
+    {
+        return 0;
+    }
 
 #ifdef AT_PRINT_RAW_CMD
-    at_print_raw_cmd("sendline", send_buf, last_cmd_len);
+    at_print_raw_cmd("sendline", send_buf, len);
 #endif
 
-    return rt_device_write(device, 0, send_buf, last_cmd_len);
+    return at_utils_send(device, 0, send_buf, len);
 }
 
-rt_size_t at_vprintfln(rt_device_t device, const char *format, va_list args)
+rt_size_t at_vprintfln(rt_device_t device, char *send_buf, rt_size_t buf_size, const char *format, va_list args)
 {
-    rt_size_t len;
+    rt_size_t len = vsnprintf(send_buf, buf_size - 2, format, args);
+    if (len == 0)
+    {
+        return 0;
+    }
 
-    len = at_vprintf(device, format, args);
+    send_buf[len++] = '\r';
+    send_buf[len++] = '\n';
 
-    rt_device_write(device, 0, "\r\n", 2);
+#ifdef AT_PRINT_RAW_CMD
+    at_print_raw_cmd("sendline", send_buf, len);
+#endif
 
-    return len + 2;
+    return at_utils_send(device, 0, send_buf, len);
 }

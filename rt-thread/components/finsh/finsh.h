@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2018, RT-Thread Development Team
+ * Copyright (c) 2006-2021, RT-Thread Development Team
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -10,240 +10,238 @@
 #ifndef __FINSH_H__
 #define __FINSH_H__
 
-#include <rtthread.h>
-#include "finsh_api.h"
+#include <rtdef.h>
 
-/* -- the beginning of option -- */
-#define FINSH_NAME_MAX          16      /* max length of identifier */
-#define FINSH_NODE_MAX          16      /* max number of node */
+#ifdef _MSC_VER
+#pragma section("FSymTab$f",read)
+#endif /* _MSC_VER */
 
-#define FINSH_HEAP_MAX          128     /* max length of heap */
-#define FINSH_STRING_MAX        128     /* max length of string */
-#define FINSH_VARIABLE_MAX      8       /* max number of variable */
+#ifdef FINSH_USING_OPTION_COMPLETION
+#define FINSH_COND(opt) opt,
+#else
+#define FINSH_COND(opt)
+#endif
 
-#define FINSH_STACK_MAX         64      /* max stack size */
-#define FINSH_TEXT_MAX          128     /* max text segment size */
+#ifdef FINSH_USING_DESCRIPTION
+#define FINSH_DESC(cmd, desc) __fsym_##cmd##_desc,
+#else
+#define FINSH_DESC(cmd, desc)
+#endif
 
-#define HEAP_ALIGNMENT          4       /* heap alignment */
+typedef long (*syscall_func)(void);
+#ifdef FINSH_USING_SYMTAB
 
-#define FINSH_GET16(x)    (*(x)) | (*((x)+1) << 8)
-#define FINSH_GET32(x)    (rt_uint32_t)(*(x)) | ((rt_uint32_t)*((x)+1) << 8) | \
-    ((rt_uint32_t)*((x)+2) << 16) | ((rt_uint32_t)*((x)+3) << 24)
-
-#define FINSH_SET16(x, v)           \
-    do                              \
-    {                               \
-        *(x)     = (v) & 0x00ff;    \
-        (*((x)+1)) = (v) >> 8;      \
-    } while ( 0 )
-
-#define FINSH_SET32(x, v)                                       \
-    do                                                          \
-    {                                                           \
-        *(x)     = (rt_uint32_t)(v)  & 0x000000ff;              \
-        (*((x)+1)) = ((rt_uint32_t)(v) >> 8) & 0x000000ff;      \
-        (*((x)+2)) = ((rt_uint32_t)(v) >> 16) & 0x000000ff;     \
-        (*((x)+3)) = ((rt_uint32_t)(v) >> 24);                  \
-    } while ( 0 )
-
-/* -- the end of option -- */
-
-/* std header file */
-#include <stdio.h>
-#include <ctype.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-
-#define FINSH_VERSION_MAJOR         1
-#define FINSH_VERSION_MINOR         0
+#ifdef __TI_COMPILER_VERSION__
+#define __TI_FINSH_EXPORT_FUNCTION(f)  PRAGMA(DATA_SECTION(f,"FSymTab"))
+#endif /* __TI_COMPILER_VERSION__ */
 
 /**
- * @addtogroup finsh
+ * Macro to export a command along with its name, description, and options to the symbol table in MSVC.
+ * @param name The function name associated with the command.
+ * @param cmd The command name.
+ * @param desc The description of the command.
+ * @param opt The options associated with the command, used for option completion.
  */
-/*@{*/
-#define FINSH_ERROR_OK              0   /**< No error           */
-#define FINSH_ERROR_INVALID_TOKEN   1   /**< Invalid token      */
-#define FINSH_ERROR_EXPECT_TYPE     2   /**< Expect a type      */
-#define FINSH_ERROR_UNKNOWN_TYPE    3   /**< Unknown type       */
-#define FINSH_ERROR_VARIABLE_EXIST  4   /**< Variable exist     */
-#define FINSH_ERROR_EXPECT_OPERATOR 5   /**< Expect a operator  */
-#define FINSH_ERROR_MEMORY_FULL     6   /**< Memory full        */
-#define FINSH_ERROR_UNKNOWN_OP      7   /**< Unknown operator   */
-#define FINSH_ERROR_UNKNOWN_NODE    8   /**< Unknown node       */
-#define FINSH_ERROR_EXPECT_CHAR     9   /**< Expect a character */
-#define FINSH_ERROR_UNEXPECT_END    10  /**< Unexpect end       */
-#define FINSH_ERROR_UNKNOWN_TOKEN   11  /**< Unknown token      */
-#define FINSH_ERROR_NO_FLOAT        12  /**< Float not supported */
-#define FINSH_ERROR_UNKNOWN_SYMBOL  13  /**< Unknown symbol     */
-#define FINSH_ERROR_NULL_NODE       14  /**< Null node          */
-/*@}*/
+#ifdef _MSC_VER
+#define MSH_FUNCTION_EXPORT_CMD(name, cmd, desc, opt)               \
+                const char __fsym_##cmd##_name[] = #cmd;            \
+                const char __fsym_##cmd##_desc[] = #desc;           \
+                __declspec(allocate("FSymTab$f"))                   \
+                const struct finsh_syscall __fsym_##cmd =           \
+                {                           \
+                    __fsym_##cmd##_name,    \
+                    FINSH_DESC(cmd, desc)   \
+                    FINSH_COND(opt)         \
+                    (syscall_func)&name     \
+                };
+#pragma comment(linker, "/merge:FSymTab=mytext")
+
+#elif defined(__TI_COMPILER_VERSION__)
+#ifdef __TMS320C28XX__
+#define RT_NOBLOCKED __attribute__((noblocked))
+#else
+#define RT_NOBLOCKED
+#endif
+#define MSH_FUNCTION_EXPORT_CMD(name, cmd, desc, opt)                           \
+                __TI_FINSH_EXPORT_FUNCTION(__fsym_##cmd);                       \
+                const char __fsym_##cmd##_name[] = #cmd;                        \
+                const char __fsym_##cmd##_desc[] = #desc;                       \
+                rt_used RT_NOBLOCKED const struct finsh_syscall __fsym_##cmd =  \
+                {                           \
+                    __fsym_##cmd##_name,    \
+                    FINSH_DESC(cmd, desc)   \
+                    FINSH_COND(opt)         \
+                    (syscall_func)&name     \
+                };
+
+#else
+#define MSH_FUNCTION_EXPORT_CMD(name, cmd, desc, opt)                                  \
+                const char __fsym_##cmd##_name[] rt_section(".rodata.name") = #cmd;    \
+                const char __fsym_##cmd##_desc[] rt_section(".rodata.name") = #desc;   \
+                rt_used const struct finsh_syscall __fsym_##cmd rt_section("FSymTab")= \
+                {                           \
+                    __fsym_##cmd##_name,    \
+                    FINSH_DESC(cmd, desc)   \
+                    FINSH_COND(opt)         \
+                    (syscall_func)&name     \
+                };
+
+#endif  /* _MSC_VER */
+#endif /* FINSH_USING_SYMTAB */
+
+/**
+ * Macro definitions to simplify the declaration of exported functions or commands.
+ */
+#define __MSH_GET_MACRO(_1, _2, _3, _FUN, ...)  _FUN
+#define __MSH_GET_EXPORT_MACRO(_1, _2, _3, _4, _FUN, ...) _FUN
+
+#define _MSH_FUNCTION_CMD2(a0, a1)       \
+        MSH_FUNCTION_EXPORT_CMD(a0, a0, a1, 0)
+
+#define _MSH_FUNCTION_CMD2_OPT(a0, a1, a2)       \
+        MSH_FUNCTION_EXPORT_CMD(a0, a0, a1, a0##_msh_options)
+
+#define _MSH_FUNCTION_EXPORT_CMD3(a0, a1, a2)       \
+        MSH_FUNCTION_EXPORT_CMD(a0, a1, a2, 0)
+
+#define _MSH_FUNCTION_EXPORT_CMD3_OPT(a0, a1, a2, a3)   \
+        MSH_FUNCTION_EXPORT_CMD(a0, a1, a2, a0##_msh_options)
+
+
+/**
+ * @ingroup finsh
+ *
+ * This macro exports a system function to finsh shell.
+ *
+ * @param name the name of function.
+ * @param desc the description of function, which will show in help.
+ */
+#define FINSH_FUNCTION_EXPORT(name, desc)
+
+/**
+ * @ingroup finsh
+ *
+ * This macro exports a system function with an alias name to finsh shell.
+ *
+ * @param name the name of function.
+ * @param alias the alias name of function.
+ * @param desc the description of function, which will show in help.
+ */
+#define FINSH_FUNCTION_EXPORT_ALIAS(name, alias, desc)
+
+/**
+ * @ingroup msh
+ *
+ * This macro exports a command to module shell.
+ *
+ * @param command is the name of the command.
+ * @param desc is the description of the command, which will show in help list.
+ * @param opt This is an option, enter any content to enable option completion
+ */
+/* MSH_CMD_EXPORT(command, desc) or MSH_CMD_EXPORT(command, desc, opt) */
+#define MSH_CMD_EXPORT(...)                                 \
+    __MSH_GET_MACRO(__VA_ARGS__, _MSH_FUNCTION_CMD2_OPT,    \
+        _MSH_FUNCTION_CMD2)(__VA_ARGS__)
+
+/**
+ * @ingroup msh
+ *
+ * This macro exports a command with alias to module shell.
+ *
+ * @param command is the name of the command.
+ * @param alias is the alias of the command.
+ * @param desc is the description of the command, which will show in help list.
+ * @param opt This is an option, enter any content to enable option completion
+ * @note
+ *      #define MSH_CMD_EXPORT_ALIAS(command, alias, desc) or
+ *      #define MSH_CMD_EXPORT_ALIAS(command, alias, desc, opt)
+ */
+#define MSH_CMD_EXPORT_ALIAS(...)                                           \
+    __MSH_GET_EXPORT_MACRO(__VA_ARGS__, _MSH_FUNCTION_EXPORT_CMD3_OPT,      \
+            _MSH_FUNCTION_EXPORT_CMD3)(__VA_ARGS__)
+
+/* system call table */
+struct finsh_syscall
+{
+    const char     *name;       /* the name of system call */
+#if defined(FINSH_USING_DESCRIPTION) && defined(FINSH_USING_SYMTAB)
+    const char     *desc;       /* description of system call */
+#endif
+
+#ifdef FINSH_USING_OPTION_COMPLETION
+    struct msh_cmd_opt *opt;
+#endif
+    syscall_func func;      /* the function address of system call */
+};
 
 /* system call item */
 struct finsh_syscall_item
 {
-    struct finsh_syscall_item* next;    /* next item */
+    struct finsh_syscall_item *next;    /* next item */
     struct finsh_syscall syscall;       /* syscall */
 };
-extern struct finsh_syscall_item *global_syscall_list;
 
-/* system variable table */
-struct finsh_sysvar
+#ifdef FINSH_USING_OPTION_COMPLETION
+typedef struct msh_cmd_opt
 {
-    const char*     name;       /* the name of variable */
-#if defined(FINSH_USING_DESCRIPTION) && defined(FINSH_USING_SYMTAB)
-    const char*     desc;       /* description of system variable */
+    rt_uint32_t     id;
+    const char      *name;
+    const char      *des;
+} msh_cmd_opt_t;
+
+/* Command options declaration and definition macros */
+
+/**
+ * Declares a static array of command options for a specific command.
+ * @param command The command associated with these options.
+ */
+#define CMD_OPTIONS_STATEMENT(command) static struct msh_cmd_opt command##_msh_options[];
+
+/**
+ * Starts the definition of command options for a specific command.
+ * @param command The command these options are associated with.
+ */
+#define CMD_OPTIONS_NODE_START(command) static struct msh_cmd_opt command##_msh_options[] = {
+
+/**
+ * Defines a single command option.
+ * @param _id Unique identifier for the option.
+ * @param _name The name of the option.
+ * @param _des Description of the option.
+ */
+#define CMD_OPTIONS_NODE(_id, _name, _des) {.id = _id, .name = #_name, .des = #_des},
+
+/**
+ * Marks the end of command options definition.
+ */
+#define CMD_OPTIONS_NODE_END    {0},};
+
+void msh_opt_list_dump(void *options);
+int msh_cmd_opt_id_get(int argc, char *argv[], void *options);
+#define MSH_OPT_ID_GET(fun) msh_cmd_opt_id_get(argc, argv, (void*) fun##_msh_options)
+#define MSH_OPT_DUMP(fun)   msh_opt_list_dump((void*) fun##_msh_options)
+
+#else
+#define CMD_OPTIONS_STATEMENT(command)
+#define CMD_OPTIONS_NODE_START(command)
+#define CMD_OPTIONS_NODE(_id, _name, _des)
+#define CMD_OPTIONS_NODE_END
+#define MSH_OPT_ID_GET(fun) ((int)(-1UL))
+#define MSH_OPT_DUMP(fun)   do{}while(0)
 #endif
-    uint8_t      type;      /* the type of variable */
-    void*        var ;      /* the address of variable */
-};
+
+extern struct finsh_syscall_item *global_syscall_list;
+extern struct finsh_syscall *_syscall_table_begin, *_syscall_table_end;
 
 #if defined(_MSC_VER) || (defined(__GNUC__) && defined(__x86_64__))
-struct finsh_syscall* finsh_syscall_next(struct finsh_syscall* call);
-struct finsh_sysvar* finsh_sysvar_next(struct finsh_sysvar* call);
-#define FINSH_NEXT_SYSCALL(index)  index=finsh_syscall_next(index)
-#define FINSH_NEXT_SYSVAR(index)   index=finsh_sysvar_next(index)
+    struct finsh_syscall *finsh_syscall_next(struct finsh_syscall *call);
+    #define FINSH_NEXT_SYSCALL(index)  index=finsh_syscall_next(index)
 #else
-#define FINSH_NEXT_SYSCALL(index)  index++
-#define FINSH_NEXT_SYSVAR(index)   index++
+    #define FINSH_NEXT_SYSCALL(index)  index++
 #endif
 
-/* system variable item */
-struct finsh_sysvar_item
-{
-    struct finsh_sysvar_item *next;     /* next item */
-    struct finsh_sysvar sysvar;         /* system variable */
-};
-extern struct finsh_sysvar *_sysvar_table_begin, *_sysvar_table_end;
-extern struct finsh_sysvar_item* global_sysvar_list;
-
-/* find out system variable, which should be implemented in user program */
-struct finsh_sysvar* finsh_sysvar_lookup(const char* name);
-
-
-struct finsh_token
-{
-    char eof;
-    char replay;
-
-    int  position;
-    uint8_t current_token;
-
-    union {
-        char char_value;
-        int int_value;
-        long long_value;
-    } value;
-    uint8_t string[FINSH_STRING_MAX];
-
-    uint8_t* line;
-};
-
-#define FINSH_IDTYPE_VAR        0x01
-#define FINSH_IDTYPE_SYSVAR     0x02
-#define FINSH_IDTYPE_SYSCALL    0x04
-#define FINSH_IDTYPE_ADDRESS    0x08
-struct finsh_node
-{
-    uint8_t node_type;  /* node node_type */
-    uint8_t data_type;  /* node data node_type */
-    uint8_t idtype;     /* id node information */
-
-    union {         /* value node */
-        char    char_value;
-        short   short_value;
-        int     int_value;
-        long    long_value;
-        void*   ptr;
-    } value;
-    union
-    {
-        /* point to variable identifier or function identifier */
-        struct finsh_var    *var;
-        struct finsh_sysvar *sysvar;
-        struct finsh_syscall*syscall;
-    }id;
-
-    /* sibling and child node */
-    struct finsh_node *sibling, *child;
-};
-
-struct finsh_parser
-{
-    uint8_t* parser_string;
-
-    struct finsh_token token;
-    struct finsh_node* root;
-};
-
-/**
- * @ingroup finsh
- *
- * The basic data type in finsh shell
- */
-enum finsh_type {
-    finsh_type_unknown = 0, /**< unknown data type */
-    finsh_type_void,        /**< void           */
-    finsh_type_voidp,       /**< void pointer   */
-    finsh_type_char,        /**< char           */
-    finsh_type_uchar,       /**< unsigned char  */
-    finsh_type_charp,       /**< char pointer   */
-    finsh_type_short,       /**< short          */
-    finsh_type_ushort,      /**< unsigned short */
-    finsh_type_shortp,      /**< short pointer  */
-    finsh_type_int,         /**< int            */
-    finsh_type_uint,        /**< unsigned int   */
-    finsh_type_intp,        /**< int pointer    */
-    finsh_type_long,        /**< long           */
-    finsh_type_ulong,       /**< unsigned long  */
-    finsh_type_longp        /**< long pointer   */
-};
-
-/* init finsh environment */
-int finsh_init(struct finsh_parser* parser);
-/* flush finsh node, text segment */
-int finsh_flush(struct finsh_parser* parser);
-/* reset all of finsh */
-int finsh_reset(struct finsh_parser* parser);
-#ifdef RT_USING_DEVICE
-void finsh_set_device(const char* device_name);
+#if !defined(RT_USING_POSIX_STDIO) && defined(RT_USING_DEVICE)
+void finsh_set_device(const char *device_name);
 #endif
 
-/* run finsh parser to generate abstract synatx tree */
-void finsh_parser_run (struct finsh_parser* parser, const unsigned char* string);
-/* run compiler to compile abstract syntax tree */
-int finsh_compiler_run(struct finsh_node* node);
-/* run finsh virtual machine */
-void finsh_vm_run(void);
-
-/* get variable value */
-struct finsh_var* finsh_var_lookup(const char* name);
-/* get bottom value of stack */
-long finsh_stack_bottom(void);
-
-/* get error number of finsh */
-uint8_t finsh_errno(void);
-/* get error string */
-const char* finsh_error_string(uint8_t type);
-
-#ifdef RT_USING_HEAP
-/**
- * @ingroup finsh
- *
- * This function appends a system call to finsh runtime environment
- * @param name the name of system call
- * @param func the function pointer of system call
- */
-void finsh_syscall_append(const char* name, syscall_func func);
-
-/**
- * @ingroup finsh
- *
- * This function appends a system variable to finsh runtime environment
- * @param name the name of system variable
- * @param type the data type of system variable
- * @param addr the address of system variable
- */
-void finsh_sysvar_append(const char* name, uint8_t type, void* addr);
-#endif
 #endif
