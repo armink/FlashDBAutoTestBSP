@@ -15,7 +15,7 @@
 /* more configuration macro is in rtconfig.h */
 #include <rtconfig.h>
 
-extern void rt_kprintf(const char *fmt, ...);
+extern int rt_kprintf(const char *fmt, ...);
 #define FDB_PRINT(...)             rt_kprintf(__VA_ARGS__)
 
 #define FDB_USING_FILE_POSIX_MODE
