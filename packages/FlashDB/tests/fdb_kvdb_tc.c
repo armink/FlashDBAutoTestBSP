@@ -186,6 +186,7 @@ static void test_fdb_change_kv_blob(void)
     read_len = fdb_kv_get_blob(&test_kvdb, TEST_KV_BLOB_NAME, fdb_blob_make(&blob_obj, &read_tick, sizeof(read_tick)));
     uassert_int_equal(blob->saved.len, sizeof(read_tick));
     uassert_int_equal(blob->saved.len, read_len);
+    rt_thread_mdelay(1);
     uassert_int_not_equal(tick, read_tick);
 
     result = fdb_kv_set_blob(&test_kvdb, TEST_KV_BLOB_NAME, fdb_blob_make(&blob_obj, &tick, sizeof(tick)));
@@ -207,6 +208,7 @@ static void test_fdb_del_kv_blob(void)
     read_len = fdb_kv_get_blob(&test_kvdb, TEST_KV_BLOB_NAME, fdb_blob_make(&blob, &read_tick, sizeof(read_tick)));
     uassert_int_equal(blob.saved.len, sizeof(read_tick));
     uassert_int_equal(blob.saved.len, read_len);
+    rt_thread_mdelay(1);
     uassert_int_not_equal(tick, read_tick);
 
     result = fdb_kv_set_blob(&test_kvdb, TEST_KV_BLOB_NAME, fdb_blob_make(&blob, NULL, 0));
@@ -242,6 +244,7 @@ static void test_fdb_change_kv(void)
     read_value = fdb_kv_get(&test_kvdb, TEST_KV_NAME);
     uassert_not_null(read_value);
     read_tick = atoi(read_value);
+    rt_thread_mdelay(1);
     uassert_int_not_equal(tick, read_tick);
 
     snprintf(value_buf, sizeof(value_buf), "%" PRIu32, tick);
@@ -270,6 +273,7 @@ static void test_fdb_del_kv(void)
     read_value = fdb_kv_get(&test_kvdb, TEST_KV_NAME);
     uassert_not_null(read_value);
     read_tick = atoi(read_value);
+    rt_thread_mdelay(1);
     uassert_int_not_equal(tick, read_tick);
 
     result = fdb_kv_del(&test_kvdb, TEST_KV_NAME);
