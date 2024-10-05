@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Armink, <armink.ztl@gmail.com>
+ * Copyright (c) 2020-2023, Armink, <armink.ztl@gmail.com>
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -12,13 +12,17 @@
 #ifndef _FDB_DEF_H_
 #define _FDB_DEF_H_
 
+#ifdef FDB_USING_NATIVE_ASSERT
+#include <assert.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* software version number */
-#define FDB_SW_VERSION                 "1.2.0"
-#define FDB_SW_VERSION_NUM             0x10200
+#define FDB_SW_VERSION                 "2.1.0"
+#define FDB_SW_VERSION_NUM             0x20100
 
 /* the KV max name length must less then it */
 #ifndef FDB_KV_NAME_MAX
@@ -32,7 +36,7 @@ extern "C" {
 
 /* the sector cache table size, it will improve KV save speed when using cache */
 #ifndef FDB_SECTOR_CACHE_TABLE_SIZE
-#define FDB_SECTOR_CACHE_TABLE_SIZE    4
+#define FDB_SECTOR_CACHE_TABLE_SIZE    8
 #endif
 
 #if (FDB_KV_CACHE_TABLE_SIZE > 0) && (FDB_SECTOR_CACHE_TABLE_SIZE > 0)
@@ -41,6 +45,11 @@ extern "C" {
 
 #if defined(FDB_USING_FILE_LIBC_MODE) || defined(FDB_USING_FILE_POSIX_MODE)
 #define FDB_USING_FILE_MODE
+#endif
+
+/* the file cache table size, it will improve GC speed in file mode when using cache */
+#ifndef FDB_FILE_CACHE_TABLE_SIZE
+#define FDB_FILE_CACHE_TABLE_SIZE    2
 #endif
 
 #ifndef FDB_WRITE_GRAN
@@ -62,12 +71,18 @@ extern "C" {
 /* routine print function. Must be implement by user. */
 #define FDB_INFO(...)                  FDB_LOG_PREFIX();FDB_PRINT(__VA_ARGS__)
 /* assert for developer. */
+#ifdef FDB_USING_NATIVE_ASSERT
+#define FDB_ASSERT(EXPR)               assert(EXPR);
+#else
+#ifndef FDB_ASSERT
 #define FDB_ASSERT(EXPR)                                                      \
 if (!(EXPR))                                                                  \
 {                                                                             \
     FDB_INFO("(%s) has assert failed at %s.\n", #EXPR, __func__);             \
     while (1);                                                                \
 }
+#endif /* FDB_ASSERT */
+#endif /* FDB_USING_NATIVE_ASSERT */
 
 #define FDB_KVDB_CTRL_SET_SEC_SIZE     0x00             /**< set sector size control command, this change MUST before database initialization */
 #define FDB_KVDB_CTRL_GET_SEC_SIZE     0x01             /**< get sector size control command */
@@ -244,12 +259,6 @@ struct kv_cache_node {
 };
 typedef struct kv_cache_node *kv_cache_node_t;
 
-struct sector_cache_node {
-    uint32_t addr;                               /**< sector start address */
-    uint32_t empty_addr;                         /**< sector empty address */
-};
-typedef struct sector_cache_node *sector_cache_node_t;
-
 /* database structure */
 typedef struct fdb_db *fdb_db_t;
 struct fdb_db {
@@ -270,11 +279,12 @@ struct fdb_db {
     bool file_mode;                              /**< is file mode, default is false */
     bool not_formatable;                         /**< is can NOT be formated mode, default is false */
 #ifdef FDB_USING_FILE_MODE
+    uint32_t cur_file_sec[FDB_FILE_CACHE_TABLE_SIZE];/**< last operate sector address  */
 #if defined(FDB_USING_FILE_POSIX_MODE)
-    int cur_file;                                /**< current file object */
+    int cur_file[FDB_FILE_CACHE_TABLE_SIZE];     /**< current file object */
 #elif defined(FDB_USING_FILE_LIBC_MODE)
-    FILE *cur_file;                              /**< current file object */
-#endif
+    FILE *cur_file[FDB_FILE_CACHE_TABLE_SIZE];   /**< current file object */
+#endif /* FDB_USING_FILE_MODE */
     uint32_t cur_sec;                            /**< current operate sector address  */
 #endif
     void (*lock)(fdb_db_t db);                   /**< lock the database operate */
@@ -297,7 +307,7 @@ struct fdb_kvdb {
     /* KV cache table */
     struct kv_cache_node kv_cache_table[FDB_KV_CACHE_TABLE_SIZE];
     /* sector cache table, it caching the sector info which status is current using */
-    struct sector_cache_node sector_cache_table[FDB_SECTOR_CACHE_TABLE_SIZE];
+    struct kvdb_sec_info sector_cache_table[FDB_SECTOR_CACHE_TABLE_SIZE];
 #endif /* FDB_KV_USING_CACHE */
 
 #ifdef FDB_KV_AUTO_UPDATE

@@ -14,6 +14,13 @@
 #include <flashdb.h>
 #include <fdb_low_lvl.h>
 #include <string.h>
+#include <inttypes.h>
+
+#ifdef FDB_USING_FILE_POSIX_MODE
+#if !defined(_MSC_VER)
+#include <unistd.h>
+#endif
+#endif /* FDB_USING_FILE_POSIX_MODE */
 
 #define FDB_LOG_TAG ""
 
@@ -37,13 +44,14 @@ fdb_err_t _fdb_init_ex(fdb_db_t db, const char *name, const char *path, fdb_db_t
 
     if (db->file_mode) {
 #ifdef FDB_USING_FILE_MODE
+        memset(db->cur_file_sec, FDB_FAILED_ADDR, FDB_FILE_CACHE_TABLE_SIZE * sizeof(db->cur_file_sec[0]));
         /* must set when using file mode */
         FDB_ASSERT(db->sec_size != 0);
         FDB_ASSERT(db->max_size != 0);
 #ifdef FDB_USING_FILE_POSIX_MODE
-        db->cur_file = -1;
+        memset(db->cur_file, -1, FDB_FILE_CACHE_TABLE_SIZE * sizeof(db->cur_file[0]));
 #else
-        db->cur_file = 0;
+        memset(db->cur_file, 0, FDB_FILE_CACHE_TABLE_SIZE * sizeof(db->cur_file[0]));
 #endif
         db->storage.dir = path;
         FDB_ASSERT(strlen(path) != 0)
@@ -65,7 +73,10 @@ fdb_err_t _fdb_init_ex(fdb_db_t db, const char *name, const char *path, fdb_db_t
             db->sec_size = block_size;
         } else {
             /* must be aligned with block size */
-            FDB_ASSERT(db->sec_size % block_size == 0);
+            if (db->sec_size % block_size != 0) {
+                FDB_INFO("Error: db sector size (%" PRIu32 ") MUST align with block size (%zu).\n", db->sec_size, block_size);
+                return FDB_INIT_FAILED;
+            }
         }
 
         db->max_size = db->storage.part->len;
@@ -75,9 +86,15 @@ fdb_err_t _fdb_init_ex(fdb_db_t db, const char *name, const char *path, fdb_db_t
     /* the block size MUST to be the Nth power of 2 */
     FDB_ASSERT((db->sec_size & (db->sec_size - 1)) == 0);
     /* must align with sector size */
-    FDB_ASSERT(db->max_size % db->sec_size == 0);
-    /* must have more than or equal 2 sector */
-    FDB_ASSERT(db->max_size / db->sec_size >= 2);
+    if (db->max_size % db->sec_size != 0) {
+        FDB_INFO("Error: db total size (%" PRIu32 ") MUST align with sector size (%" PRIu32 ").\n", db->max_size, db->sec_size);
+        return FDB_INIT_FAILED;
+    }
+    /* must has more than or equal 2 sectors */
+    if (db->max_size / db->sec_size < 2) {
+        FDB_INFO("Error: db MUST has more than or equal 2 sectors, current has %" PRIu32 " sector(s)\n", db->max_size / db->sec_size);
+        return FDB_INIT_FAILED;
+    }
 
     return FDB_NO_ERR;
 }
@@ -93,8 +110,8 @@ void _fdb_init_finish(fdb_db_t db, fdb_err_t result)
             log_is_show = true;
         }
     } else if (!db->not_formatable) {
-        FDB_INFO("Error: %s (%s) is initialize fail (%d).\n", db->type == FDB_DB_TYPE_KV ? "KVDB" : "TSDB",
-                db->name, (int)result);
+        FDB_INFO("Error: %s (%s@%s) is initialize fail (%d).\n", db->type == FDB_DB_TYPE_KV ? "KVDB" : "TSDB",
+                db->name, _fdb_db_path(db), (int)result);
     }
 }
 
@@ -104,20 +121,37 @@ void _fdb_deinit(fdb_db_t db)
 
     if (db->init_ok) {
 #ifdef FDB_USING_FILE_MODE
+        for (int i = 0; i < FDB_FILE_CACHE_TABLE_SIZE; i++) {
 #ifdef FDB_USING_FILE_POSIX_MODE
-        if (db->cur_file > 0) {
-#if !defined(_MSC_VER)
-#include <unistd.h>
-#endif
-            close(db->cur_file);
-        }
+            if (db->cur_file[i] > 0) {
+                close(db->cur_file[i]);
+            }
 #else
-        if (db->cur_file != 0) {
-            fclose(db->cur_file);
-        }
+            if (db->cur_file[i] != 0) {
+                fclose(db->cur_file[i]);
+            }
 #endif /* FDB_USING_FILE_POSIX_MODE */
+        }
 #endif /* FDB_USING_FILE_MODE */
     }
 
     db->init_ok = false;
+}
+
+const char *_fdb_db_path(fdb_db_t db)
+{
+    if (db->file_mode) {
+#ifdef FDB_USING_FILE_MODE
+        return db->storage.dir;
+#else
+        return NULL;
+#endif
+    }
+    else {
+#ifdef FDB_USING_FAL_MODE
+        return db->storage.part->name;
+#else
+        return NULL;
+#endif
+    }
 }
