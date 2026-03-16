@@ -45,6 +45,8 @@ int main(void)
     bool mode_true = true, mode_false= false;
 
     printf("hello rt-thread\n");
+    printf("FlashDB version: %s\n", FDB_SW_VERSION);
+    printf("FlashDB write granularity: %d\n", FDB_WRITE_GRAN);
 
     fal_init();
 
